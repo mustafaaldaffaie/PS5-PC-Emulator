@@ -1,5 +1,7 @@
 add_library(ps5emu_core STATIC
     src/Core.cpp
+    src/elf/Elf64.cpp
+    src/memory/GuestMemory.cpp
 )
 
 target_include_directories(ps5emu_core
