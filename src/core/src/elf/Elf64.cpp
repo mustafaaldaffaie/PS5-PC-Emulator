@@ -18,6 +18,7 @@ constexpr std::uint8_t kElfDataLittleEndian = 1;
 constexpr std::uint8_t kElfCurrentVersion = 1;
 constexpr std::uint16_t kMachineX86_64 = 62;
 constexpr std::uint32_t kProgramTypeLoad = 1;
+constexpr std::uint32_t kProgramTypeDynamic = 2;
 
 template <typename T>
 T ReadObject(std::span<const std::byte> bytes, std::size_t offset) {
@@ -64,6 +65,26 @@ struct ProgramHeader {
 
 static_assert(sizeof(ElfHeader) == 64);
 static_assert(sizeof(ProgramHeader) == 56);
+
+Segment ToSegment(const ProgramHeader& header) {
+    return Segment{
+        .virtualAddress = header.virtualAddress,
+        .memorySize = header.memorySize,
+        .fileSize = header.fileSize,
+        .fileOffset = header.offset,
+        .flags = header.flags,
+        .alignment = header.alignment,
+    };
+}
+
+void ValidateFileRange(std::span<const std::byte> bytes,
+                       const ProgramHeader& header,
+                       const char* message) {
+    if (header.offset > bytes.size() ||
+        header.fileSize > bytes.size() - header.offset) {
+        throw std::runtime_error(message);
+    }
+}
 
 } // namespace
 
@@ -121,27 +142,34 @@ Image Elf64::Parse(std::span<const std::byte> bytes) {
         const auto programHeader =
             ReadObject<ProgramHeader>(bytes, static_cast<std::size_t>(offset));
 
-        if (programHeader.type != kProgramTypeLoad) {
+        if (programHeader.type == kProgramTypeLoad) {
+            if (programHeader.fileSize > programHeader.memorySize) {
+                throw std::runtime_error(
+                    "ELF load segment file size exceeds memory size");
+            }
+
+            ValidateFileRange(
+                bytes,
+                programHeader,
+                "ELF load segment extends past end of file");
+
+            image.loadSegments.push_back(ToSegment(programHeader));
             continue;
         }
 
-        if (programHeader.fileSize > programHeader.memorySize) {
-            throw std::runtime_error("ELF load segment file size exceeds memory size");
-        }
+        if (programHeader.type == kProgramTypeDynamic) {
+            if (image.dynamicSegment.has_value()) {
+                throw std::runtime_error(
+                    "ELF contains more than one dynamic segment");
+            }
 
-        if (programHeader.offset > bytes.size() ||
-            programHeader.fileSize > bytes.size() - programHeader.offset) {
-            throw std::runtime_error("ELF load segment extends past end of file");
-        }
+            ValidateFileRange(
+                bytes,
+                programHeader,
+                "ELF dynamic segment extends past end of file");
 
-        image.loadSegments.push_back(Segment{
-            .virtualAddress = programHeader.virtualAddress,
-            .memorySize = programHeader.memorySize,
-            .fileSize = programHeader.fileSize,
-            .fileOffset = programHeader.offset,
-            .flags = programHeader.flags,
-            .alignment = programHeader.alignment,
-        });
+            image.dynamicSegment = ToSegment(programHeader);
+        }
     }
 
     return image;

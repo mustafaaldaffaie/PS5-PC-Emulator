@@ -1,21 +1,55 @@
+#include <fstream>
 #include <iostream>
 #include <string_view>
+#include <vector>
 
 #include <ps5emu/Core.hpp>
+#include <ps5emu/elf/DynamicMetadata.hpp>
+#include <ps5emu/elf/Elf64.hpp>
 #include <ps5emu/loader/ExecutableImageLoader.hpp>
 #include <ps5emu/memory/GuestMemory.hpp>
 
 namespace {
 
+std::vector<std::byte> ReadFile(const char* path) {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file) {
+        throw std::runtime_error("Failed to open executable file");
+    }
+
+    const auto size = file.tellg();
+    if (size < 0) {
+        throw std::runtime_error("Failed to determine executable file size");
+    }
+
+    std::vector<std::byte> bytes(static_cast<std::size_t>(size));
+    file.seekg(0, std::ios::beg);
+
+    if (!bytes.empty()) {
+        file.read(reinterpret_cast<char*>(bytes.data()),
+                  static_cast<std::streamsize>(bytes.size()));
+        if (!file) {
+            throw std::runtime_error("Failed to read executable file");
+        }
+    }
+
+    return bytes;
+}
+
 int InspectExecutable(const char* path) {
+    const auto bytes = ReadFile(path);
+    const auto elfImage = ps5emu::elf::Elf64::Parse(bytes);
+    const auto dynamic =
+        ps5emu::elf::DynamicMetadataParser::Parse(bytes, elfImage);
+
     ps5emu::memory::GuestMemory memory;
-    const auto image =
-        ps5emu::loader::ExecutableImageLoader::LoadElfFile(path, memory);
+    const auto loaded =
+        ps5emu::loader::ExecutableImageLoader::LoadElf(bytes, memory);
 
     std::cout << "Entry point: 0x"
-              << std::hex << image.entryPoint << std::dec << '\n';
+              << std::hex << loaded.entryPoint << std::dec << '\n';
     std::cout << "Mapped segments: "
-              << image.mappedSegmentCount << '\n';
+              << loaded.mappedSegmentCount << '\n';
 
     for (const auto& mapping : memory.Mappings()) {
         std::cout << "  guest=0x"
@@ -24,6 +58,12 @@ int InspectExecutable(const char* path) {
                   << " protection=0x"
                   << static_cast<unsigned>(mapping.protection)
                   << std::dec << '\n';
+    }
+
+    std::cout << "Needed libraries: "
+              << dynamic.neededLibraries.size() << '\n';
+    for (const auto& library : dynamic.neededLibraries) {
+        std::cout << "  " << library << '\n';
     }
 
     return 0;
