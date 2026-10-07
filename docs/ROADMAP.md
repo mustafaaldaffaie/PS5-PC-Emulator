@@ -9,14 +9,14 @@
 - [x] Source-language guard
 - [x] Initial ELF64 parser
 - [x] Initial guest-memory abstraction
-- [ ] Unit tests for ELF and memory
+- [x] Unit tests for ELF and memory
 - [ ] Structured logging
 - [ ] Crash reporting
 
 ## Phase 2 - Executable loading
 
-- [ ] Map PT_LOAD segments
-- [ ] Entry-point validation
+- [x] Map PT_LOAD segments
+- [x] Entry-point validation
 - [ ] Relocation model
 - [ ] Dynamic symbol parsing
 - [ ] Import table parsing
