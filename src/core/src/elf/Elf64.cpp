@@ -15,6 +15,8 @@ constexpr std::array<std::byte, 4> kElfMagic{
 
 constexpr std::uint8_t kElfClass64 = 2;
 constexpr std::uint8_t kElfDataLittleEndian = 1;
+constexpr std::uint8_t kElfCurrentVersion = 1;
+constexpr std::uint16_t kMachineX86_64 = 62;
 constexpr std::uint32_t kProgramTypeLoad = 1;
 
 template <typename T>
@@ -60,6 +62,9 @@ struct ProgramHeader {
 };
 #pragma pack(pop)
 
+static_assert(sizeof(ElfHeader) == 64);
+static_assert(sizeof(ProgramHeader) == 56);
+
 } // namespace
 
 Image Elf64::Parse(std::span<const std::byte> bytes) {
@@ -83,7 +88,21 @@ Image Elf64::Parse(std::span<const std::byte> bytes) {
         throw std::runtime_error("Only little-endian ELF executables are supported");
     }
 
-    if (header.programHeaderEntrySize != sizeof(ProgramHeader)) {
+    if (header.ident[6] != kElfCurrentVersion ||
+        header.version != kElfCurrentVersion) {
+        throw std::runtime_error("Unsupported ELF version");
+    }
+
+    if (header.machine != kMachineX86_64) {
+        throw std::runtime_error("Only x86-64 ELF executables are supported");
+    }
+
+    if (header.headerSize != sizeof(ElfHeader)) {
+        throw std::runtime_error("Unexpected ELF64 header size");
+    }
+
+    if (header.programHeaderCount != 0 &&
+        header.programHeaderEntrySize != sizeof(ProgramHeader)) {
         throw std::runtime_error("Unexpected ELF64 program header size");
     }
 

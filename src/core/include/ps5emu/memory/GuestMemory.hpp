@@ -19,6 +19,15 @@ constexpr Protection operator|(Protection lhs, Protection rhs) noexcept {
         static_cast<std::uint8_t>(lhs) | static_cast<std::uint8_t>(rhs));
 }
 
+constexpr Protection operator&(Protection lhs, Protection rhs) noexcept {
+    return static_cast<Protection>(
+        static_cast<std::uint8_t>(lhs) & static_cast<std::uint8_t>(rhs));
+}
+
+constexpr bool HasProtection(Protection value, Protection flag) noexcept {
+    return (value & flag) != Protection::None;
+}
+
 struct Mapping {
     std::uint64_t guestAddress = 0;
     std::size_t size = 0;

@@ -24,24 +24,25 @@ bool Contains(const Mapping& mapping,
         return false;
     }
 
-    const auto mappingEnd =
-        mapping.guestAddress + static_cast<std::uint64_t>(mapping.size);
-    const auto requestEnd =
-        guestAddress + static_cast<std::uint64_t>(size);
+    if (guestAddress < mapping.guestAddress) {
+        return false;
+    }
 
-    return guestAddress >= mapping.guestAddress &&
-           requestEnd <= mappingEnd;
+    const auto offset = guestAddress - mapping.guestAddress;
+    return offset <= mapping.size &&
+           size <= mapping.size - static_cast<std::size_t>(offset);
 }
 
 bool Overlaps(const Mapping& mapping,
               std::uint64_t guestAddress,
               std::size_t size) {
-    const auto mappingEnd =
-        mapping.guestAddress + static_cast<std::uint64_t>(mapping.size);
-    const auto requestEnd =
-        guestAddress + static_cast<std::uint64_t>(size);
+    if (guestAddress < mapping.guestAddress) {
+        return static_cast<std::uint64_t>(size) >
+               mapping.guestAddress - guestAddress;
+    }
 
-    return guestAddress < mappingEnd && mapping.guestAddress < requestEnd;
+    return guestAddress - mapping.guestAddress <
+           static_cast<std::uint64_t>(mapping.size);
 }
 
 } // namespace
@@ -81,6 +82,10 @@ void GuestMemory::Write(std::uint64_t guestAddress,
                         std::span<const std::byte> bytes) {
     auto& mapping = FindMapping(guestAddress, bytes.size());
 
+    if (!HasProtection(mapping.protection, Protection::Write)) {
+        throw std::runtime_error("Guest memory region is not writable");
+    }
+
     const auto offset =
         static_cast<std::size_t>(guestAddress - mapping.guestAddress);
 
@@ -92,6 +97,10 @@ void GuestMemory::Write(std::uint64_t guestAddress,
 std::span<const std::byte>
 GuestMemory::Read(std::uint64_t guestAddress, std::size_t size) const {
     const auto& mapping = FindMapping(guestAddress, size);
+
+    if (!HasProtection(mapping.protection, Protection::Read)) {
+        throw std::runtime_error("Guest memory region is not readable");
+    }
 
     const auto offset =
         static_cast<std::size_t>(guestAddress - mapping.guestAddress);
