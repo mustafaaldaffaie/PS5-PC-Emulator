@@ -1,0 +1,16 @@
+add_library(ps5emu_hle STATIC
+    src/HleRegistry.cpp
+)
+
+target_include_directories(ps5emu_hle
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+if(PS5EMU_BUILD_TESTS)
+    add_executable(ps5emu_hle_registry_tests
+        tests/HleRegistryTests.cpp
+    )
+    target_link_libraries(ps5emu_hle_registry_tests PRIVATE ps5emu_hle)
+    add_test(NAME hle_registry COMMAND ps5emu_hle_registry_tests)
+endif()
