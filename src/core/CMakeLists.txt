@@ -1,5 +1,6 @@
 add_library(ps5emu_core STATIC
     src/Core.cpp
+    src/elf/DynamicMetadata.cpp
     src/elf/Elf64.cpp
     src/loader/ExecutableImageLoader.cpp
     src/memory/GuestMemory.cpp
@@ -16,6 +17,12 @@ if(PS5EMU_BUILD_TESTS)
     )
     target_link_libraries(ps5emu_elf64_tests PRIVATE ps5emu_core)
     add_test(NAME elf64_parser COMMAND ps5emu_elf64_tests)
+
+    add_executable(ps5emu_dynamic_metadata_tests
+        tests/DynamicMetadataTests.cpp
+    )
+    target_link_libraries(ps5emu_dynamic_metadata_tests PRIVATE ps5emu_core)
+    add_test(NAME dynamic_metadata COMMAND ps5emu_dynamic_metadata_tests)
 
     add_executable(ps5emu_guest_memory_tests
         tests/GuestMemoryTests.cpp

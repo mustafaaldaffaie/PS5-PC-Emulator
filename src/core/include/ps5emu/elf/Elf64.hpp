@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -21,6 +22,7 @@ struct Segment {
 struct Image {
     std::uint64_t entryPoint = 0;
     std::vector<Segment> loadSegments;
+    std::optional<Segment> dynamicSegment;
 };
 
 class Elf64 final {
