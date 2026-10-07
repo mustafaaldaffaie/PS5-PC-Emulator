@@ -1,5 +1,7 @@
 #include <ps5emu/elf/DynamicMetadata.hpp>
 
+#include <ps5emu/elf/ElfFileView.hpp>
+
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -19,6 +21,7 @@ constexpr std::int64_t kTagRelaSize = 8;
 constexpr std::int64_t kTagRelaEntrySize = 9;
 constexpr std::int64_t kTagStringTableSize = 10;
 constexpr std::int64_t kTagSymbolEntrySize = 11;
+constexpr std::int64_t kTagPltRelocationType = 20;
 constexpr std::int64_t kTagJumpRelocation = 23;
 
 #pragma pack(push, 1)
@@ -50,75 +53,6 @@ std::size_t CheckedSize(std::uint64_t value, const char* message) {
     }
 
     return static_cast<std::size_t>(value);
-}
-
-std::size_t VirtualAddressToFileOffset(
-    std::span<const std::byte> bytes,
-    const Image& image,
-    std::uint64_t virtualAddress,
-    std::size_t requiredSize) {
-    for (const auto& segment : image.loadSegments) {
-        if (virtualAddress < segment.virtualAddress) {
-            continue;
-        }
-
-        const auto delta = virtualAddress - segment.virtualAddress;
-        if (delta > segment.fileSize) {
-            continue;
-        }
-
-        if (requiredSize >
-            CheckedSize(segment.fileSize - delta,
-                        "ELF file-backed segment range is too large")) {
-            continue;
-        }
-
-        if (segment.fileOffset >
-            std::numeric_limits<std::uint64_t>::max() - delta) {
-            throw std::runtime_error("ELF file offset overflows");
-        }
-
-        const auto fileOffset = segment.fileOffset + delta;
-        const auto hostOffset =
-            CheckedSize(fileOffset, "ELF file offset is too large for this host");
-
-        if (hostOffset > bytes.size() ||
-            requiredSize > bytes.size() - hostOffset) {
-            throw std::runtime_error(
-                "ELF virtual address resolves outside the input file");
-        }
-
-        return hostOffset;
-    }
-
-    throw std::runtime_error(
-        "ELF virtual address is not backed by a load segment");
-}
-
-std::string ReadString(std::span<const std::byte> stringTable,
-                       std::uint64_t offset) {
-    const auto hostOffset =
-        CheckedSize(offset, "ELF string-table offset is too large");
-
-    if (hostOffset >= stringTable.size()) {
-        throw std::runtime_error(
-            "ELF string-table offset is outside the string table");
-    }
-
-    std::size_t end = hostOffset;
-    while (end < stringTable.size() &&
-           stringTable[end] != std::byte{0}) {
-        ++end;
-    }
-
-    if (end == stringTable.size()) {
-        throw std::runtime_error(
-            "ELF string is not null-terminated inside the string table");
-    }
-
-    return std::string(
-        reinterpret_cast<const char*>(stringTable.data() + hostOffset),
-        end - hostOffset);
 }
 
 } // namespace
@@ -196,6 +130,9 @@ DynamicMetadata DynamicMetadataParser::Parse(
         case kTagPltRelocationSize:
             metadata.jumpRelocationSize = entry.value;
             break;
+        case kTagPltRelocationType:
+            metadata.pltRelocationType = entry.value;
+            break;
         default:
             break;
         }
@@ -216,23 +153,15 @@ DynamicMetadata DynamicMetadataParser::Parse(
             "ELF DT_NEEDED entries require a dynamic string table");
     }
 
-    const auto stringTableSize =
-        CheckedSize(metadata.stringTableSize,
-                    "ELF dynamic string table is too large");
-    const auto stringTableOffset =
-        VirtualAddressToFileOffset(
-            bytes,
-            image,
-            *metadata.stringTableAddress,
-            stringTableSize);
-
-    const auto stringTable =
-        bytes.subspan(stringTableOffset, stringTableSize);
-
+    const ElfFileView view(bytes, image);
     metadata.neededLibraries.reserve(neededOffsets.size());
+
     for (const auto offset : neededOffsets) {
         metadata.neededLibraries.push_back(
-            ReadString(stringTable, offset));
+            view.ReadString(
+                *metadata.stringTableAddress,
+                metadata.stringTableSize,
+                offset));
     }
 
     return metadata;

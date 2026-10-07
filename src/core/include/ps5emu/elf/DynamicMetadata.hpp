@@ -22,6 +22,7 @@ struct DynamicMetadata {
     std::uint64_t relaEntrySize = 0;
     std::optional<std::uint64_t> jumpRelocationAddress;
     std::uint64_t jumpRelocationSize = 0;
+    std::optional<std::uint64_t> pltRelocationType;
 };
 
 class DynamicMetadataParser final {

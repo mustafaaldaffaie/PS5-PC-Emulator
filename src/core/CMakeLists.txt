@@ -1,7 +1,11 @@
 add_library(ps5emu_core STATIC
     src/Core.cpp
     src/elf/DynamicMetadata.cpp
+    src/elf/DynamicSymbol.cpp
     src/elf/Elf64.cpp
+    src/elf/ElfFileView.cpp
+    src/elf/ImportTable.cpp
+    src/elf/Relocation.cpp
     src/loader/ExecutableImageLoader.cpp
     src/memory/GuestMemory.cpp
 )
@@ -23,6 +27,12 @@ if(PS5EMU_BUILD_TESTS)
     )
     target_link_libraries(ps5emu_dynamic_metadata_tests PRIVATE ps5emu_core)
     add_test(NAME dynamic_metadata COMMAND ps5emu_dynamic_metadata_tests)
+
+    add_executable(ps5emu_linking_metadata_tests
+        tests/LinkingMetadataTests.cpp
+    )
+    target_link_libraries(ps5emu_linking_metadata_tests PRIVATE ps5emu_core)
+    add_test(NAME linking_metadata COMMAND ps5emu_linking_metadata_tests)
 
     add_executable(ps5emu_guest_memory_tests
         tests/GuestMemoryTests.cpp
