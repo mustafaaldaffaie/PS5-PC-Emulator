@@ -45,6 +45,19 @@ bool Overlaps(const Mapping& mapping,
            static_cast<std::uint64_t>(mapping.size);
 }
 
+void CopyIntoMapping(Mapping& mapping,
+                     std::uint64_t guestAddress,
+                     std::span<const std::byte> bytes) {
+    const auto offset =
+        static_cast<std::size_t>(guestAddress - mapping.guestAddress);
+
+    if (!bytes.empty()) {
+        std::memcpy(mapping.data.data() + offset,
+                    bytes.data(),
+                    bytes.size());
+    }
+}
+
 } // namespace
 
 void GuestMemory::Map(std::uint64_t guestAddress,
@@ -73,9 +86,15 @@ void GuestMemory::Map(std::uint64_t guestAddress,
     mapping.guestAddress = guestAddress;
     mapping.size = size;
     mapping.protection = protection;
-    mapping.data.resize(size);
+    mapping.data.resize(size, std::byte{0});
 
     mappings_.push_back(std::move(mapping));
+}
+
+void GuestMemory::Initialize(std::uint64_t guestAddress,
+                             std::span<const std::byte> bytes) {
+    auto& mapping = FindMapping(guestAddress, bytes.size());
+    CopyIntoMapping(mapping, guestAddress, bytes);
 }
 
 void GuestMemory::Write(std::uint64_t guestAddress,
@@ -86,12 +105,7 @@ void GuestMemory::Write(std::uint64_t guestAddress,
         throw std::runtime_error("Guest memory region is not writable");
     }
 
-    const auto offset =
-        static_cast<std::size_t>(guestAddress - mapping.guestAddress);
-
-    std::memcpy(mapping.data.data() + offset,
-                bytes.data(),
-                bytes.size());
+    CopyIntoMapping(mapping, guestAddress, bytes);
 }
 
 std::span<const std::byte>

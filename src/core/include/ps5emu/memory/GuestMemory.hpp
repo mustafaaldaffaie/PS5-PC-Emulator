@@ -41,6 +41,9 @@ public:
              std::size_t size,
              Protection protection);
 
+    void Initialize(std::uint64_t guestAddress,
+                    std::span<const std::byte> bytes);
+
     void Write(std::uint64_t guestAddress,
                std::span<const std::byte> bytes);
 
