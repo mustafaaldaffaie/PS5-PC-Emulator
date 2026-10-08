@@ -3,6 +3,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include <ps5emu/runtime/NativeInstructionGuard.hpp>
+
 namespace ps5emu::runtime {
 
 PreparedNativeExecution NativeExecutionBuilder::Prepare(
@@ -12,6 +14,9 @@ PreparedNativeExecution NativeExecutionBuilder::Prepare(
         GuestExecutionBuilder::Prepare(
             executableBytes,
             options);
+
+    NativeInstructionGuard::Validate(
+        guest.memory);
 
     auto nativeImage =
         NativeImageMaterializer::Materialize(

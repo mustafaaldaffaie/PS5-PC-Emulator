@@ -13,6 +13,7 @@ add_library(ps5emu_runtime STATIC
     src/NativeHleExecutor.cpp
     src/NativeHleTrapBridge.cpp
     src/NativeImageMaterializer.cpp
+    src/NativeInstructionGuard.cpp
     src/NativeLeafExecutor.cpp
     src/NativeMemoryRegion.cpp
     src/SceExecutablePreparer.cpp
@@ -113,6 +114,13 @@ if(PS5EMU_BUILD_TESTS)
     target_link_libraries(ps5emu_native_execution_builder_tests
         PRIVATE ps5emu_runtime ps5emu_test_options)
     add_test(NAME native_execution_builder COMMAND ps5emu_native_execution_builder_tests)
+
+    add_executable(ps5emu_native_instruction_guard_tests
+        tests/NativeInstructionGuardTests.cpp
+    )
+    target_link_libraries(ps5emu_native_instruction_guard_tests
+        PRIVATE ps5emu_runtime ps5emu_test_options)
+    add_test(NAME native_instruction_guard COMMAND ps5emu_native_instruction_guard_tests)
 
     add_executable(ps5emu_native_leaf_executor_tests
         tests/NativeLeafExecutorTests.cpp
