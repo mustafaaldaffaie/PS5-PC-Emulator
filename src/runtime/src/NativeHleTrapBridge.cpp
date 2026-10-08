@@ -1,5 +1,6 @@
 #include <ps5emu/runtime/NativeHleTrapBridge.hpp>
 
+#include <array>
 #include <atomic>
 #include <limits>
 #include <mutex>
@@ -13,6 +14,7 @@
 #include <Windows.h>
 #elif defined(__linux__)
 #include <csignal>
+#include <sys/syscall.h>
 #include <ucontext.h>
 #else
 #error "NativeHleTrapBridge currently supports Windows and Linux only"
@@ -43,7 +45,17 @@ static_assert(
     std::atomic<TrapState*>::is_always_lock_free,
     "Native trap capture requires lock-free pointer atomics");
 
-std::atomic<TrapState*> g_activeTrap{nullptr};
+constexpr std::size_t kMaxActiveTraps = 64;
+constexpr std::size_t kInvalidRegistration =
+    std::numeric_limits<std::size_t>::max();
+
+struct TrapRegistration {
+    std::atomic<std::uint64_t> threadToken{0};
+    std::atomic<TrapState*> state{nullptr};
+};
+
+std::array<TrapRegistration, kMaxActiveTraps>
+    g_activeTraps{};
 
 std::mutex g_installMutex;
 std::size_t g_installUsers = 0;
@@ -100,6 +112,112 @@ bool MatchesTrap(
                breakpointAddress);
 }
 
+std::uint64_t CurrentNativeThreadToken() noexcept {
+#if defined(_WIN32)
+    return static_cast<std::uint64_t>(
+        GetCurrentThreadId());
+#elif defined(__linux__)
+    long result = 0;
+    __asm__ volatile(
+        "syscall"
+        : "=a"(result)
+        : "a"(SYS_gettid)
+        : "rcx", "r11", "memory");
+
+    return result > 0
+        ? static_cast<std::uint64_t>(result)
+        : 0;
+#endif
+}
+
+TrapState* ActiveTrapForCurrentThread() noexcept {
+    const auto token =
+        CurrentNativeThreadToken();
+
+    if (token == 0) {
+        return nullptr;
+    }
+
+    for (auto& registration : g_activeTraps) {
+        if (registration.threadToken.load(
+                std::memory_order_acquire) != token) {
+            continue;
+        }
+
+        return registration.state.load(
+            std::memory_order_acquire);
+    }
+
+    return nullptr;
+}
+
+std::size_t RegisterTrap(
+    TrapState* state) {
+    const auto token =
+        CurrentNativeThreadToken();
+
+    if (token == 0) {
+        throw std::runtime_error(
+            "Failed to identify the host thread for native trap routing");
+    }
+
+    for (const auto& registration : g_activeTraps) {
+        if (registration.threadToken.load(
+                std::memory_order_acquire) == token) {
+            throw std::runtime_error(
+                "A native HLE trap is already armed on this host thread");
+        }
+    }
+
+    for (std::size_t index = 0;
+         index < g_activeTraps.size();
+         ++index) {
+        auto& registration =
+            g_activeTraps[index];
+
+        std::uint64_t expected = 0;
+        if (!registration.threadToken.compare_exchange_strong(
+                expected,
+                token,
+                std::memory_order_acq_rel,
+                std::memory_order_relaxed)) {
+            continue;
+        }
+
+        registration.state.store(
+            state,
+            std::memory_order_release);
+        return index;
+    }
+
+    throw std::runtime_error(
+        "Native HLE trap registration capacity is exhausted");
+}
+
+void UnregisterTrap(
+    std::size_t index,
+    TrapState* state) noexcept {
+    if (index == kInvalidRegistration ||
+        index >= g_activeTraps.size()) {
+        return;
+    }
+
+    auto& registration =
+        g_activeTraps[index];
+
+    auto* expected = state;
+    static_cast<void>(
+        registration.state.compare_exchange_strong(
+            expected,
+            nullptr,
+            std::memory_order_acq_rel,
+            std::memory_order_relaxed));
+
+    registration.threadToken.store(
+        0,
+        std::memory_order_release);
+}
+
 #if defined(_WIN32)
 
 void* g_vectoredHandler = nullptr;
@@ -115,8 +233,7 @@ LONG CALLBACK VectoredTrapHandler(
     }
 
     auto* state =
-        g_activeTrap.load(
-            std::memory_order_acquire);
+        ActiveTrapForCurrentThread();
 
     if (state == nullptr) {
         return EXCEPTION_CONTINUE_SEARCH;
@@ -231,8 +348,7 @@ void LinuxTrapHandler(
     }
 
     auto* state =
-        g_activeTrap.load(
-            std::memory_order_acquire);
+        ActiveTrapForCurrentThread();
 
     if (state == nullptr) {
         ForwardLinuxTrap(
@@ -416,17 +532,13 @@ NativeHleTrapBridge::Scope::Scope(
         escapeRip,
         std::memory_order_relaxed);
 
-    TrapState* expected = nullptr;
-    if (!g_activeTrap.compare_exchange_strong(
-            expected,
-            state_,
-            std::memory_order_release,
-            std::memory_order_relaxed)) {
+    try {
+        registrationIndex_ =
+            RegisterTrap(state_);
+    } catch (...) {
         delete state_;
         state_ = nullptr;
-
-        throw std::runtime_error(
-            "A native HLE trap is already armed in this process");
+        throw;
     }
 }
 
@@ -435,13 +547,12 @@ NativeHleTrapBridge::Scope::~Scope() {
         return;
     }
 
-    TrapState* expected = state_;
-    static_cast<void>(
-        g_activeTrap.compare_exchange_strong(
-            expected,
-            nullptr,
-            std::memory_order_release,
-            std::memory_order_relaxed));
+    UnregisterTrap(
+        registrationIndex_,
+        state_);
+
+    registrationIndex_ =
+        kInvalidRegistration;
 
     delete state_;
     state_ = nullptr;

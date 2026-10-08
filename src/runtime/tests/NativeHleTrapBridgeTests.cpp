@@ -2,10 +2,12 @@
 #include <ps5emu/runtime/NativeMemoryRegion.hpp>
 
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
+#include <thread>
 
 namespace {
 
@@ -113,6 +115,91 @@ int main() {
 
         assert(!scope.Captured());
         assert(scope.CapturedRip() == 0);
+    }
+
+
+    {
+        std::atomic<int> ready{0};
+        std::atomic<bool> start{false};
+        std::array<int, 2> results{};
+        std::array<bool, 2> captured{};
+
+        std::array<std::thread, 2> threads{
+            std::thread([&] {
+                auto scope =
+                    bridge.Arm(
+                        trapAddress,
+                        16,
+                        1,
+                        escapeAddress);
+
+                ready.fetch_add(
+                    1,
+                    std::memory_order_release);
+
+                while (!start.load(
+                    std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+
+                using Function = int (*)();
+                const auto function =
+                    reinterpret_cast<Function>(
+                        trapAddress);
+
+                results[0] = function();
+                captured[0] =
+                    scope.Captured() &&
+                    scope.CapturedRip() ==
+                        trapAddress + 1;
+            }),
+            std::thread([&] {
+                auto scope =
+                    bridge.Arm(
+                        trapAddress,
+                        16,
+                        1,
+                        escapeAddress);
+
+                ready.fetch_add(
+                    1,
+                    std::memory_order_release);
+
+                while (!start.load(
+                    std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+
+                using Function = int (*)();
+                const auto function =
+                    reinterpret_cast<Function>(
+                        trapAddress);
+
+                results[1] = function();
+                captured[1] =
+                    scope.Captured() &&
+                    scope.CapturedRip() ==
+                        trapAddress + 1;
+            }),
+        };
+
+        while (ready.load(
+                   std::memory_order_acquire) != 2) {
+            std::this_thread::yield();
+        }
+
+        start.store(
+            true,
+            std::memory_order_release);
+
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        assert(results[0] == 42);
+        assert(results[1] == 42);
+        assert(captured[0]);
+        assert(captured[1]);
     }
 
     assert(Throws<std::invalid_argument>([&] {

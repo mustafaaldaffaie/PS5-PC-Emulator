@@ -9,9 +9,9 @@ namespace ps5emu::runtime {
 // Redirects native INT3 exceptions from known HLE thunk slots to a caller
 // supplied escape address. Platform handlers only perform lock-free state
 // capture and native-context redirection; HLE dispatch runs later in ordinary
-// C++ execution context. Only one native HLE trap scope may be armed process-wide
-// at a time; this avoids host TLS access while Linux temporarily runs with a
-// guest FS base.
+// C++ execution context. One scope may be armed per host thread. Linux trap
+// routing identifies the host thread with a raw gettid syscall so the signal
+// handler never touches host TLS while FS temporarily points at guest TLS.
 class NativeHleTrapBridge final {
 public:
     class Scope final {
@@ -39,6 +39,8 @@ public:
               std::span<const std::uint64_t> additionalBreakpoints);
 
         State* state_ = nullptr;
+        std::size_t registrationIndex_ =
+            static_cast<std::size_t>(-1);
     };
 
     NativeHleTrapBridge();
