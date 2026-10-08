@@ -2,6 +2,7 @@ add_library(ps5emu_hle STATIC
     src/BasicLibc.cpp
     src/BuiltinServices.cpp
     src/HleRegistry.cpp
+    src/KernelMutex.cpp
     src/KernelThread.cpp
     src/KernelTime.cpp
     src/Nid.cpp
@@ -39,6 +40,13 @@ if(PS5EMU_BUILD_TESTS)
     target_link_libraries(ps5emu_basic_libc_tests
         PRIVATE ps5emu_hle ps5emu_test_options)
     add_test(NAME basic_libc COMMAND ps5emu_basic_libc_tests)
+
+    add_executable(ps5emu_kernel_mutex_tests
+        tests/KernelMutexTests.cpp
+    )
+    target_link_libraries(ps5emu_kernel_mutex_tests
+        PRIVATE ps5emu_hle ps5emu_test_options)
+    add_test(NAME kernel_mutex COMMAND ps5emu_kernel_mutex_tests)
 
     add_executable(ps5emu_kernel_thread_tests
         tests/KernelThreadTests.cpp
