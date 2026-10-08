@@ -86,7 +86,6 @@ bool NidNameDatabase::Add(std::string symbolName) {
         static_cast<void>(nidIterator);
 
         if (!nidInserted) {
-            nameToNid_.erase(nameIterator);
             throw std::runtime_error(
                 "NID database reverse mapping already exists");
         }
