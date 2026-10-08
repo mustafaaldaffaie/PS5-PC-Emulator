@@ -131,6 +131,13 @@ Image Elf64::Parse(std::span<const std::byte> bytes) {
     Image image;
     image.entryPoint = header.entry;
 
+    if (header.programHeaderCount != 0 &&
+        (header.programHeaderOffset > bytes.size() ||
+         header.programHeaderCount >
+             (bytes.size() - header.programHeaderOffset) / sizeof(ProgramHeader))) {
+        throw std::runtime_error("ELF program header table extends past end of file");
+    }
+
     for (std::uint16_t index = 0; index < header.programHeaderCount; ++index) {
         const std::uint64_t offset =
             header.programHeaderOffset +

@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -113,6 +114,54 @@ int main() {
         assert(ThrowsRuntimeError([&] {
             static_cast<void>(
                 ps5emu::loader::ExecutableImageLoader::LoadElf(bytes, memory));
+        }));
+        assert(memory.Mappings().empty());
+    }
+
+    {
+        ps5emu::memory::GuestMemory memory;
+        const auto loaded = ps5emu::loader::ExecutableImageLoader::LoadElf(
+            MakeExecutableElf(), memory, 0x100000);
+        assert(loaded.entryPoint == 0x500002);
+        assert(memory.Read(0x500000, 1)[0] == std::byte{0xde});
+    }
+
+    {
+        // A conflict in the second segment must roll back the first one.
+        auto bytes = MakeExecutableElf();
+        Write<std::uint16_t>(bytes, 56, 2);
+        std::memcpy(bytes.data() + 120, bytes.data() + 64, 56);
+        Write<std::uint64_t>(bytes, 136, 0x600000);
+        ps5emu::memory::GuestMemory memory;
+        memory.Map(0x600000, 8, ps5emu::memory::Protection::Read);
+        const std::byte marker{0x55};
+        memory.Initialize(0x600000, std::span(&marker, 1));
+        assert(ThrowsRuntimeError([&] {
+            static_cast<void>(ps5emu::loader::ExecutableImageLoader::LoadElf(
+                bytes, memory));
+        }));
+        assert(memory.Mappings().size() == 1);
+        assert(memory.Read(0x600000, 1)[0] == marker);
+        assert(!memory.IsMapped(0x400000, 8));
+    }
+
+    {
+        // A late address overflow must also leave existing mappings intact.
+        auto bytes = MakeExecutableElf();
+        Write<std::uint16_t>(bytes, 56, 2);
+        std::memcpy(bytes.data() + 120, bytes.data() + 64, 56);
+        Write<std::uint64_t>(bytes, 136,
+                            std::numeric_limits<std::uint64_t>::max() - 3);
+        ps5emu::memory::GuestMemory memory;
+        assert(ThrowsRuntimeError([&] {
+            static_cast<void>(ps5emu::loader::ExecutableImageLoader::LoadElf(
+                bytes, memory));
+        }));
+        assert(memory.Mappings().empty());
+        assert(ThrowsRuntimeError([&] {
+            static_cast<void>(ps5emu::loader::ExecutableImageLoader::LoadElf(
+                MakeExecutableElf(), memory,
+                std::numeric_limits<std::uint64_t>::max()));
         }));
         assert(memory.Mappings().empty());
     }

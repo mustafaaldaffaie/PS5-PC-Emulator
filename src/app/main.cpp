@@ -1,3 +1,4 @@
+#include <charconv>
 #include <fstream>
 #include <iostream>
 #include <string_view>
@@ -9,8 +10,48 @@
 #include <ps5emu/elf/ImportTable.hpp>
 #include <ps5emu/loader/ExecutableImageLoader.hpp>
 #include <ps5emu/memory/GuestMemory.hpp>
+#include <ps5emu/runtime/ExecutableLinker.hpp>
 
 namespace {
+
+std::vector<std::byte> ReadFile(const char* path);
+
+void PrintUsage(std::ostream& stream) {
+    stream << "Usage: ps5emu inspect <elf-file>\n"
+           << "       ps5emu prepare <elf-file> [load-bias]\n";
+}
+
+std::uint64_t ParseLoadBias(std::string_view text) {
+    int base = 10;
+    if (text.starts_with("0x") || text.starts_with("0X")) {
+        text.remove_prefix(2);
+        base = 16;
+    }
+    std::uint64_t value = 0;
+    const auto parsed = std::from_chars(text.data(), text.data() + text.size(),
+                                        value, base);
+    if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size()) {
+        throw std::runtime_error("Invalid load bias; use unsigned decimal or 0x hexadecimal");
+    }
+    return value;
+}
+
+int PrepareExecutable(const char* path, std::uint64_t loadBias) {
+    const auto bytes = ReadFile(path);
+    ps5emu::memory::GuestMemory memory;
+    ps5emu::runtime::LinkOptions options;
+    options.loadBias = loadBias;
+    const auto linked = ps5emu::runtime::ExecutableLinker::Load(
+        bytes, memory, options);
+    std::cout << "Prepared entry point: 0x" << std::hex
+              << linked.loaded.entryPoint << std::dec << '\n';
+    std::cout << "Mapped segments: " << linked.loaded.mappedSegmentCount << '\n';
+    std::cout << "Applied relocations: " << linked.appliedRelocationCount << '\n';
+    std::cout << "Unresolved weak symbols: "
+              << linked.unresolvedWeakSymbolCount << '\n';
+    std::cout << "Guest execution is not implemented.\n";
+    return 0;
+}
 
 std::vector<std::byte> ReadFile(const char* path) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
@@ -87,7 +128,7 @@ int main(int argc, char* argv[]) {
         if (argc == 1) {
             std::cout << "PS5-PC-Emulator "
                       << ps5emu::Core::Version() << '\n';
-            std::cout << "Usage: ps5emu inspect <elf-file>\n";
+            PrintUsage(std::cout);
             return 0;
         }
 
@@ -95,8 +136,13 @@ int main(int argc, char* argv[]) {
             return InspectExecutable(argv[2]);
         }
 
+        if ((argc == 3 || argc == 4) &&
+            std::string_view(argv[1]) == "prepare") {
+            return PrepareExecutable(argv[2], argc == 4 ? ParseLoadBias(argv[3]) : 0);
+        }
+
         std::cerr << "Invalid command line.\n";
-        std::cerr << "Usage: ps5emu inspect <elf-file>\n";
+        PrintUsage(std::cerr);
         return 1;
     } catch (const std::exception& error) {
         std::cerr << "Error: " << error.what() << '\n';

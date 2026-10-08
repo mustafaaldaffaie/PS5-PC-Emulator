@@ -20,6 +20,8 @@ struct RelocationContext {
 
 class RelocationApplier final {
 public:
+    // All values and targets are validated before writing. Resolver callbacks
+    // must not mutate memory or its mappings during this operation.
     static void Apply(
         std::span<const elf::Relocation> relocations,
         memory::GuestMemory& memory,

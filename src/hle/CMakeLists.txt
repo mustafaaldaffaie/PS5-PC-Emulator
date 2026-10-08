@@ -11,6 +11,6 @@ if(PS5EMU_BUILD_TESTS)
     add_executable(ps5emu_hle_registry_tests
         tests/HleRegistryTests.cpp
     )
-    target_link_libraries(ps5emu_hle_registry_tests PRIVATE ps5emu_hle)
+    target_link_libraries(ps5emu_hle_registry_tests PRIVATE ps5emu_hle ps5emu_test_options)
     add_test(NAME hle_registry COMMAND ps5emu_hle_registry_tests)
 endif()

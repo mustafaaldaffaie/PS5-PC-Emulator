@@ -18,11 +18,13 @@ class ExecutableImageLoader final {
 public:
     [[nodiscard]] static LoadedImage
     LoadElf(std::span<const std::byte> bytes,
-            memory::GuestMemory& memory);
+            memory::GuestMemory& memory,
+            std::uint64_t loadBias = 0);
 
     [[nodiscard]] static LoadedImage
     LoadElfFile(const std::filesystem::path& path,
-                memory::GuestMemory& memory);
+                memory::GuestMemory& memory,
+                std::uint64_t loadBias = 0);
 };
 
 } // namespace ps5emu::loader

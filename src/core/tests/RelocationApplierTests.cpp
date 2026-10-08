@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <vector>
@@ -123,6 +124,52 @@ int main() {
                 memory,
                 context);
         }));
+    }
+
+    {
+        // A late unresolved symbol must not publish an earlier valid patch.
+        const std::vector<Relocation> partial{
+            Relocation{.offset = 0x40, .type = 8, .addend = 0x10},
+            Relocation{.offset = 0x48, .symbolIndex = 99, .type = 6},
+        };
+        assert(ThrowsRuntimeError([&] {
+            RelocationApplier::Apply(partial, memory, context);
+        }));
+        assert(ReadU64(memory, 0x500040) == 0);
+    }
+
+    {
+        const std::vector<Relocation> invalidTarget{
+            Relocation{.offset = 0x40, .type = 8, .addend = 0x10},
+            Relocation{.offset = 0xfc, .type = 8, .addend = 0x20},
+        };
+        assert(ThrowsRuntimeError([&] {
+            RelocationApplier::Apply(invalidTarget, memory, context);
+        }));
+        assert(ReadU64(memory, 0x500040) == 0);
+    }
+
+    {
+        RelocationContext zero;
+        zero.loadBias = 0x500000;
+        const std::vector<Relocation> special{
+            Relocation{.offset = std::numeric_limits<std::uint64_t>::max(),
+                       .type = 0},
+            Relocation{.offset = 0x50, .symbolIndex = 0, .type = 1, .addend = 42},
+        };
+        RelocationApplier::Apply(special, memory, zero);
+        assert(ReadU64(memory, 0x500050) == 42);
+    }
+
+    {
+        const std::vector<Relocation> underflow{
+            Relocation{.offset = 0x58, .type = 8,
+                       .addend = std::numeric_limits<std::int64_t>::min()},
+        };
+        assert(ThrowsRuntimeError([&] {
+            RelocationApplier::Apply(underflow, memory, context);
+        }));
+        assert(ReadU64(memory, 0x500058) == 0);
     }
 
     return 0;
