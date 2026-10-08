@@ -5,6 +5,7 @@ add_library(ps5emu_runtime STATIC
     src/HleThunkTable.cpp
     src/HleTrapHandler.cpp
     src/ImportResolver.cpp
+    src/NativeContextAdapter.cpp
     src/SceExecutablePreparer.cpp
     src/SceImportResolver.cpp
 )
@@ -68,4 +69,11 @@ if(PS5EMU_BUILD_TESTS)
     target_link_libraries(ps5emu_hle_trap_handler_tests
         PRIVATE ps5emu_runtime ps5emu_test_options)
     add_test(NAME hle_trap_handler COMMAND ps5emu_hle_trap_handler_tests)
+
+    add_executable(ps5emu_native_context_adapter_tests
+        tests/NativeContextAdapterTests.cpp
+    )
+    target_link_libraries(ps5emu_native_context_adapter_tests
+        PRIVATE ps5emu_runtime ps5emu_test_options)
+    add_test(NAME native_context_adapter COMMAND ps5emu_native_context_adapter_tests)
 endif()
