@@ -283,6 +283,95 @@ int main() {
     }
 
     {
+        constexpr std::uint64_t timeCode =
+            base + 0xb0000ull;
+        constexpr std::uint64_t timeStack =
+            base + 0xc0000ull;
+        constexpr std::uint64_t timeData =
+            base + 0xd0000ull;
+
+        GuestMemory timeMemory;
+        timeMemory.Map(
+            timeCode,
+            0x1000,
+            Protection::Read |
+                Protection::Execute);
+        timeMemory.Map(
+            timeStack,
+            0x4000,
+            Protection::Read |
+                Protection::Write);
+        timeMemory.Map(
+            timeData,
+            0x1000,
+            Protection::Read |
+                Protection::Write);
+
+        std::vector<std::byte> timeCodeBytes;
+        timeCodeBytes.push_back(std::byte{0xb8});
+        AppendU32(timeCodeBytes, 232);
+        timeCodeBytes.push_back(std::byte{0xbf});
+        AppendU32(timeCodeBytes, 0);
+        timeCodeBytes.push_back(std::byte{0x48});
+        timeCodeBytes.push_back(std::byte{0xbe});
+        AppendU64(timeCodeBytes, timeData);
+        timeCodeBytes.push_back(std::byte{0x0f});
+        timeCodeBytes.push_back(std::byte{0x05});
+        timeCodeBytes.push_back(std::byte{0xc3});
+
+        timeMemory.Initialize(
+            timeCode,
+            timeCodeBytes);
+
+        const auto timeTraps =
+            ps5emu::runtime::NativeSyscallInterceptor::Rewrite(
+                timeMemory);
+
+        auto timeImage =
+            NativeImageMaterializer::Materialize(
+                timeMemory);
+
+        ps5emu::hle::HleRegistry emptyRegistry;
+        HleThunkTable emptyThunks(
+            HleThunkTableOptions{
+                .baseAddress = base + 0xe0000ull,
+                .slotSize = 16,
+                .capacity = 4,
+            });
+
+        SysvGuestContext timeContext{
+            .rsp = timeStack + 0x2000,
+            .rip = timeCode,
+            .rflags = 0x203,
+        };
+
+        NativeHleExecutor timeExecutor;
+        const auto timeResult =
+            timeExecutor.Run(
+                timeContext,
+                timeImage,
+                emptyRegistry,
+                emptyThunks,
+                timeTraps);
+
+        assert(timeResult.handledSyscallCount == 1);
+        assert(!timeResult.interceptedSyscall);
+        assert(timeResult.syscallNumber == 232);
+        assert(timeContext.rax == 0);
+        assert(timeContext.rip == 0);
+
+        const auto* value =
+            static_cast<const std::int64_t*>(
+                timeImage.HostAddress(
+                    timeData,
+                    16));
+
+        assert(value[0] > 0);
+        assert(value[1] >= 0);
+        assert(value[1] < 1000000000ll);
+    }
+
+    {
         constexpr std::uint64_t syscallCode =
             base + 0x50000ull;
         constexpr std::uint64_t syscallStack =
