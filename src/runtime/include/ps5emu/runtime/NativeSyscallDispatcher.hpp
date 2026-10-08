@@ -8,8 +8,11 @@ namespace ps5emu::runtime {
 
 struct GuestProcessIdentity {
     std::uint64_t processId = 1000;
+    std::uint64_t parentProcessId = 1;
     std::uint64_t userId = 1000;
     std::uint64_t effectiveUserId = 1000;
+    std::uint64_t groupId = 1000;
+    std::uint64_t effectiveGroupId = 1000;
 };
 
 struct NativeSyscallDispatchResult {
