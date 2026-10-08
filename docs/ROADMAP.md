@@ -24,13 +24,15 @@
 - [x] Dynamic symbol parsing
 - [x] Import table parsing
 - [x] Single-image linking with local and injected external addresses
-- [ ] Module metadata
+- [x] SCE module and library metadata
 - [ ] SELF container research and clean-room parser
 
 ## Phase 3 - HLE
 
-- [ ] NID resolver
+- [x] Qualified SCE import identity decoding
+- [ ] NID name database and forward hashing
 - [x] HLE service registry foundation
+- [ ] Guest-call trampolines
 - [ ] Threading primitives
 - [ ] Time and synchronization
 - [ ] Filesystem

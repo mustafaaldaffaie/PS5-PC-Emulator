@@ -8,6 +8,7 @@
 #include <ps5emu/elf/DynamicMetadata.hpp>
 #include <ps5emu/elf/Elf64.hpp>
 #include <ps5emu/elf/ImportTable.hpp>
+#include <ps5emu/elf/SceModuleMetadata.hpp>
 #include <ps5emu/loader/ExecutableImageLoader.hpp>
 #include <ps5emu/memory/GuestMemory.hpp>
 #include <ps5emu/runtime/ExecutableLinker.hpp>
@@ -83,6 +84,11 @@ int InspectExecutable(const char* path) {
     const auto elfImage = ps5emu::elf::Elf64::Parse(bytes);
     const auto dynamic =
         ps5emu::elf::DynamicMetadataParser::Parse(bytes, elfImage);
+    const auto sceMetadata =
+        ps5emu::elf::SceModuleMetadataParser::Parse(
+            bytes,
+            elfImage,
+            dynamic);
     const auto imports =
         ps5emu::elf::ImportTable::Parse(bytes, elfImage, dynamic);
 
@@ -108,6 +114,41 @@ int InspectExecutable(const char* path) {
               << dynamic.neededLibraries.size() << '\n';
     for (const auto& library : dynamic.neededLibraries) {
         std::cout << "  " << library << '\n';
+    }
+
+    if (sceMetadata.module.has_value()) {
+        std::cout << "SCE module: "
+                  << sceMetadata.module->name
+                  << " id=" << sceMetadata.module->id
+                  << " version="
+                  << static_cast<unsigned>(
+                         sceMetadata.module->versionMajor)
+                  << '.'
+                  << static_cast<unsigned>(
+                         sceMetadata.module->versionMinor)
+                  << '\n';
+    }
+
+    std::cout << "SCE needed modules: "
+              << sceMetadata.neededModules.size() << '\n';
+    for (const auto& module : sceMetadata.neededModules) {
+        std::cout << "  id=" << module.id
+                  << " name=" << module.name
+                  << " version="
+                  << static_cast<unsigned>(module.versionMajor)
+                  << '.'
+                  << static_cast<unsigned>(module.versionMinor)
+                  << '\n';
+    }
+
+    std::cout << "SCE import libraries: "
+              << sceMetadata.importLibraries.size() << '\n';
+    for (const auto& library : sceMetadata.importLibraries) {
+        std::cout << "  id=" << library.id
+                  << " name=" << library.name
+                  << " version=0x"
+                  << std::hex << library.version << std::dec
+                  << '\n';
     }
 
     std::cout << "Imports: " << imports.size() << '\n';

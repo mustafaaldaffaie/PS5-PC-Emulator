@@ -1,6 +1,7 @@
 add_library(ps5emu_runtime STATIC
     src/ExecutableLinker.cpp
     src/ImportResolver.cpp
+    src/SceImportResolver.cpp
 )
 
 target_include_directories(ps5emu_runtime
@@ -27,4 +28,11 @@ if(PS5EMU_BUILD_TESTS)
     )
     target_link_libraries(ps5emu_import_resolver_tests PRIVATE ps5emu_runtime ps5emu_test_options)
     add_test(NAME import_resolver COMMAND ps5emu_import_resolver_tests)
+
+    add_executable(ps5emu_sce_import_resolver_tests
+        tests/SceImportResolverTests.cpp
+    )
+    target_link_libraries(ps5emu_sce_import_resolver_tests
+        PRIVATE ps5emu_runtime ps5emu_test_options)
+    add_test(NAME sce_import_resolver COMMAND ps5emu_sce_import_resolver_tests)
 endif()
