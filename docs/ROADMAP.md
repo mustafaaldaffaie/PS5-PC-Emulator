@@ -35,7 +35,8 @@
 - [x] Synthetic guest thunk allocation and relocation binding
 - [x] Guest-call ABI dispatch (integer/pointer baseline)
 - [x] HLE guest-memory access interface
-- [ ] Threading primitives
+- [x] Thread identity/equality/yield baseline
+- [ ] Thread creation/join and synchronization primitives
 - [ ] Time and synchronization
 - [ ] Filesystem
 - [x] Basic libc memory bridge (memcpy/memmove/memset)

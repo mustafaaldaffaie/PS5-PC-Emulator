@@ -20,7 +20,7 @@ int main() {
     const auto registry =
         ps5emu::hle::BuiltinServices::CreateRegistry();
 
-    assert(registry.Size() == 21);
+    assert(registry.Size() == 27);
 
     assert(
         FindSymbol(
@@ -52,6 +52,37 @@ int main() {
             registry,
             "libkernel",
             "sceKernelNanosleep") != nullptr);
+
+    assert(
+        FindSymbol(
+            registry,
+            "libkernel",
+            "scePthreadSelf") != nullptr);
+    assert(
+        FindSymbol(
+            registry,
+            "libkernel",
+            "scePthreadEqual") != nullptr);
+    assert(
+        FindSymbol(
+            registry,
+            "libkernel",
+            "scePthreadYield") != nullptr);
+    assert(
+        FindSymbol(
+            registry,
+            "libkernel",
+            "pthread_self") != nullptr);
+    assert(
+        FindSymbol(
+            registry,
+            "libkernel",
+            "pthread_equal") != nullptr);
+    assert(
+        FindSymbol(
+            registry,
+            "libkernel",
+            "sched_yield") != nullptr);
 
     assert(
         FindSymbol(
