@@ -1,11 +1,13 @@
 #include <ps5emu/hle/BuiltinServices.hpp>
 
 #include <ps5emu/hle/BasicLibc.hpp>
+#include <ps5emu/hle/KernelThread.hpp>
 #include <ps5emu/hle/KernelTime.hpp>
 
 namespace ps5emu::hle {
 
 void BuiltinServices::Register(HleRegistry& registry) {
+    KernelThread::Register(registry, "libkernel");
     KernelTime::Register(registry, "libkernel");
 
     BasicLibc::Register(registry, "libc");
