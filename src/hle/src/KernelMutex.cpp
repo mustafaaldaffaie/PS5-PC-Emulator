@@ -1,6 +1,7 @@
 #include <ps5emu/hle/KernelMutex.hpp>
 
 #include <array>
+#include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -21,8 +22,10 @@ constexpr std::uint64_t kSceErrorDeadlock = 0x8002000bull;
 constexpr std::uint64_t kSceErrorFault = 0x8002000eull;
 constexpr std::uint64_t kSceErrorBusy = 0x80020010ull;
 constexpr std::uint64_t kSceErrorInvalid = 0x80020016ull;
+constexpr std::uint64_t kSceErrorTimedOut = 0x8002003cull;
 
 constexpr std::uint64_t kStaticAdaptiveMutex = 1;
+constexpr std::uint64_t kDestroyedCondition = 2;
 constexpr std::uint64_t kHandleBase = 0x00007ffb00000000ull;
 constexpr std::uint64_t kHandleStride = 0x100ull;
 
@@ -35,6 +38,21 @@ enum class MutexType : std::uint32_t {
 
 struct MutexAttribute {
     MutexType type = MutexType::ErrorCheck;
+};
+
+struct ConditionAttribute {
+    std::int32_t clockId = 0;
+};
+
+struct ConditionObject {
+    explicit ConditionObject(std::int32_t value)
+        : clockId(value) {
+    }
+
+    std::int32_t clockId = 0;
+    std::mutex lock;
+    std::condition_variable condition;
+    std::size_t waiters = 0;
 };
 
 struct MutexObject {
@@ -54,6 +72,8 @@ struct MutexState {
     std::mutex lock;
     std::uint64_t nextHandle = kHandleBase;
     std::unordered_map<std::uint64_t, MutexAttribute> attributes;
+    std::unordered_map<std::uint64_t, ConditionAttribute> conditionAttributes;
+    std::unordered_map<std::uint64_t, std::shared_ptr<ConditionObject>> conditions;
     std::unordered_map<std::uint64_t, std::shared_ptr<MutexObject>> mutexes;
 
     std::uint64_t AllocateHandle() {
@@ -444,6 +464,341 @@ void MutexUnlock(HleCallFrame& frame,
 }
 
 
+
+std::shared_ptr<ConditionObject> ResolveCondition(
+    HleCallFrame& frame,
+    MutexState& state,
+    std::uint64_t pointerAddress,
+    bool initializeStatic) {
+    std::uint64_t handle = 0;
+    if (!ReadHandle(frame, pointerAddress, handle)) {
+        return {};
+    }
+
+    std::scoped_lock stateLock(state.lock);
+
+    if (handle == kDestroyedCondition) {
+        return {};
+    }
+
+    if (handle == 0 && initializeStatic) {
+        handle = state.AllocateHandle();
+        state.conditions.emplace(
+            handle,
+            std::make_shared<ConditionObject>(0));
+
+        if (!WriteHandle(frame, pointerAddress, handle)) {
+            state.conditions.erase(handle);
+            return {};
+        }
+    }
+
+    const auto found = state.conditions.find(handle);
+    return found == state.conditions.end()
+        ? std::shared_ptr<ConditionObject>{}
+        : found->second;
+}
+
+void CondAttrInit(HleCallFrame& frame,
+                  MutexState& state) {
+    const auto output = frame.arguments[0];
+    if (output == 0 || frame.memory == nullptr) {
+        frame.returnValue = kSceErrorFault;
+        return;
+    }
+
+    std::scoped_lock lock(state.lock);
+    const auto handle = state.AllocateHandle();
+    state.conditionAttributes.emplace(
+        handle,
+        ConditionAttribute{});
+
+    if (!WriteHandle(frame, output, handle)) {
+        state.conditionAttributes.erase(handle);
+        frame.returnValue = kSceErrorFault;
+        return;
+    }
+
+    frame.returnValue = kSceOk;
+}
+
+void CondAttrDestroy(HleCallFrame& frame,
+                     MutexState& state) {
+    const auto pointer = frame.arguments[0];
+    std::uint64_t handle = 0;
+    if (!ReadHandle(frame, pointer, handle)) {
+        frame.returnValue = kSceErrorFault;
+        return;
+    }
+
+    {
+        std::scoped_lock lock(state.lock);
+        if (state.conditionAttributes.erase(handle) == 0) {
+            frame.returnValue = kSceErrorInvalid;
+            return;
+        }
+    }
+
+    if (!WriteHandle(frame, pointer, 0)) {
+        frame.returnValue = kSceErrorFault;
+        return;
+    }
+
+    frame.returnValue = kSceOk;
+}
+
+void CondAttrSetClock(HleCallFrame& frame,
+                      MutexState& state) {
+    const auto pointer = frame.arguments[0];
+    std::uint64_t handle = 0;
+    if (!ReadHandle(frame, pointer, handle)) {
+        frame.returnValue = kSceErrorFault;
+        return;
+    }
+
+    std::scoped_lock lock(state.lock);
+    const auto found =
+        state.conditionAttributes.find(handle);
+    if (found == state.conditionAttributes.end()) {
+        frame.returnValue = kSceErrorInvalid;
+        return;
+    }
+
+    found->second.clockId =
+        static_cast<std::int32_t>(frame.arguments[1]);
+    frame.returnValue = kSceOk;
+}
+
+void CondInit(HleCallFrame& frame,
+              MutexState& state) {
+    const auto pointer = frame.arguments[0];
+    const auto attrPointer = frame.arguments[1];
+
+    if (pointer == 0 || frame.memory == nullptr) {
+        frame.returnValue = kSceErrorFault;
+        return;
+    }
+
+    std::int32_t clockId = 0;
+
+    std::scoped_lock lock(state.lock);
+
+    if (attrPointer != 0) {
+        std::uint64_t attrHandle = 0;
+        if (!ReadHandle(frame, attrPointer, attrHandle)) {
+            frame.returnValue = kSceErrorFault;
+            return;
+        }
+
+        const auto found =
+            state.conditionAttributes.find(attrHandle);
+        if (found == state.conditionAttributes.end()) {
+            frame.returnValue = kSceErrorInvalid;
+            return;
+        }
+
+        clockId = found->second.clockId;
+    }
+
+    const auto handle = state.AllocateHandle();
+    state.conditions.emplace(
+        handle,
+        std::make_shared<ConditionObject>(clockId));
+
+    if (!WriteHandle(frame, pointer, handle)) {
+        state.conditions.erase(handle);
+        frame.returnValue = kSceErrorFault;
+        return;
+    }
+
+    frame.returnValue = kSceOk;
+}
+
+void CondDestroy(HleCallFrame& frame,
+                 MutexState& state) {
+    const auto pointer = frame.arguments[0];
+    std::uint64_t handle = 0;
+    if (!ReadHandle(frame, pointer, handle)) {
+        frame.returnValue = kSceErrorFault;
+        return;
+    }
+
+    if (handle == kDestroyedCondition) {
+        frame.returnValue = kSceErrorInvalid;
+        return;
+    }
+
+    if (handle == 0) {
+        if (!WriteHandle(
+                frame,
+                pointer,
+                kDestroyedCondition)) {
+            frame.returnValue = kSceErrorFault;
+            return;
+        }
+
+        frame.returnValue = kSceOk;
+        return;
+    }
+
+    std::shared_ptr<ConditionObject> condition;
+    {
+        std::scoped_lock lock(state.lock);
+        const auto found = state.conditions.find(handle);
+        if (found == state.conditions.end()) {
+            frame.returnValue = kSceErrorInvalid;
+            return;
+        }
+        condition = found->second;
+    }
+
+    {
+        std::scoped_lock lock(condition->lock);
+        if (condition->waiters != 0) {
+            frame.returnValue = kSceErrorBusy;
+            return;
+        }
+    }
+
+    {
+        std::scoped_lock lock(state.lock);
+        state.conditions.erase(handle);
+    }
+
+    if (!WriteHandle(
+            frame,
+            pointer,
+            kDestroyedCondition)) {
+        frame.returnValue = kSceErrorFault;
+        return;
+    }
+
+    frame.returnValue = kSceOk;
+}
+
+void CondSignal(HleCallFrame& frame,
+                MutexState& state,
+                bool broadcast) {
+    const auto condition =
+        ResolveCondition(
+            frame,
+            state,
+            frame.arguments[0],
+            true);
+
+    if (!condition) {
+        frame.returnValue = kSceErrorInvalid;
+        return;
+    }
+
+    std::scoped_lock lock(condition->lock);
+
+    if (broadcast) {
+        condition->condition.notify_all();
+    } else {
+        condition->condition.notify_one();
+    }
+
+    frame.returnValue = kSceOk;
+}
+
+void ReacquireMutex(
+    const std::shared_ptr<MutexObject>& mutex,
+    std::thread::id owner,
+    std::uint32_t recursion) {
+    std::unique_lock lock(mutex->lock);
+    mutex->condition.wait(
+        lock,
+        [&] { return !mutex->held; });
+
+    mutex->held = true;
+    mutex->owner = owner;
+    mutex->recursion = recursion;
+}
+
+void CondWait(HleCallFrame& frame,
+              MutexState& state,
+              bool timed) {
+    const auto condition =
+        ResolveCondition(
+            frame,
+            state,
+            frame.arguments[0],
+            true);
+    const auto mutex =
+        ResolveMutex(
+            frame,
+            state,
+            frame.arguments[1],
+            true);
+
+    if (!condition || !mutex) {
+        frame.returnValue = kSceErrorInvalid;
+        return;
+    }
+
+    const auto current =
+        std::this_thread::get_id();
+
+    std::unique_lock conditionLock(
+        condition->lock);
+
+    std::uint32_t savedRecursion = 0;
+    {
+        std::unique_lock mutexLock(mutex->lock);
+
+        if (!mutex->held ||
+            mutex->owner != current) {
+            frame.returnValue = kSceErrorPerm;
+            return;
+        }
+
+        savedRecursion = mutex->recursion;
+        mutex->held = false;
+        mutex->owner = {};
+        mutex->recursion = 0;
+    }
+
+    mutex->condition.notify_one();
+
+    ++condition->waiters;
+
+    bool timedOut = false;
+
+    if (timed) {
+        const auto raw =
+            frame.arguments[2];
+        const auto maximum =
+            static_cast<std::uint64_t>(
+                std::numeric_limits<std::int64_t>::max());
+        const auto bounded =
+            static_cast<std::int64_t>(
+                raw > maximum ? maximum : raw);
+
+        timedOut =
+            condition->condition.wait_for(
+                conditionLock,
+                std::chrono::microseconds(bounded)) ==
+            std::cv_status::timeout;
+    } else {
+        condition->condition.wait(
+            conditionLock);
+    }
+
+    --condition->waiters;
+    conditionLock.unlock();
+
+    ReacquireMutex(
+        mutex,
+        current,
+        savedRecursion);
+
+    frame.returnValue =
+        timedOut
+            ? kSceErrorTimedOut
+            : kSceOk;
+}
+
 std::uint64_t ToPosixError(std::uint64_t value) {
     if (value == 0) {
         return 0;
@@ -532,6 +887,62 @@ void KernelMutex::Register(
         "scePthreadMutexUnlock",
         [state](HleCallFrame& frame) {
             MutexUnlock(frame, *state);
+        });
+
+
+    registry.RegisterSymbol(
+        moduleName,
+        "scePthreadCondattrInit",
+        [state](HleCallFrame& frame) {
+            CondAttrInit(frame, *state);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "scePthreadCondattrDestroy",
+        [state](HleCallFrame& frame) {
+            CondAttrDestroy(frame, *state);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "scePthreadCondattrSetclock",
+        [state](HleCallFrame& frame) {
+            CondAttrSetClock(frame, *state);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "scePthreadCondInit",
+        [state](HleCallFrame& frame) {
+            CondInit(frame, *state);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "scePthreadCondDestroy",
+        [state](HleCallFrame& frame) {
+            CondDestroy(frame, *state);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "scePthreadCondSignal",
+        [state](HleCallFrame& frame) {
+            CondSignal(frame, *state, false);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "scePthreadCondBroadcast",
+        [state](HleCallFrame& frame) {
+            CondSignal(frame, *state, true);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "scePthreadCondWait",
+        [state](HleCallFrame& frame) {
+            CondWait(frame, *state, false);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "scePthreadCondTimedwait",
+        [state](HleCallFrame& frame) {
+            CondWait(frame, *state, true);
         });
 
     registry.RegisterSymbol(
