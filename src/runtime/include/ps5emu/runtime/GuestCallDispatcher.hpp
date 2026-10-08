@@ -19,6 +19,16 @@ struct SysvGuestContext {
     std::uint64_t rax = 0;
     std::uint64_t rip = 0;
     std::uint64_t fsBase = 0;
+
+    std::uint64_t rbx = 0;
+    std::uint64_t rbp = 0;
+    std::uint64_t r10 = 0;
+    std::uint64_t r11 = 0;
+    std::uint64_t r12 = 0;
+    std::uint64_t r13 = 0;
+    std::uint64_t r14 = 0;
+    std::uint64_t r15 = 0;
+    std::uint64_t rflags = 0x202;
 };
 
 struct GuestCallDispatchResult {

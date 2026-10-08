@@ -88,6 +88,15 @@ int main() {
         .rsp = rsp,
         .rax = 999,
         .fsBase = 0x710020,
+        .rbx = 0x1111,
+        .rbp = 0x2222,
+        .r10 = 0x3333,
+        .r11 = 0x4444,
+        .r12 = 0x5555,
+        .r13 = 0x6666,
+        .r14 = 0x7777,
+        .r15 = 0x8888,
+        .rflags = 0x246,
     };
 
     const auto result =
@@ -102,6 +111,15 @@ int main() {
     assert(result.errorCode == -42);
     assert(context.rax == 36);
     assert(context.fsBase == 0x710020);
+    assert(context.rbx == 0x1111);
+    assert(context.rbp == 0x2222);
+    assert(context.r10 == 0x3333);
+    assert(context.r11 == 0x4444);
+    assert(context.r12 == 0x5555);
+    assert(context.r13 == 0x6666);
+    assert(context.r14 == 0x7777);
+    assert(context.r15 == 0x8888);
+    assert(context.rflags == 0x246);
     assert(memory.Read(0x100080, 1)[0] == std::byte{0x5a});
 
     {

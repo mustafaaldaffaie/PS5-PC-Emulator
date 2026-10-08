@@ -83,6 +83,10 @@ int main() {
         .rax = 0,
         .rip = thunkAddress + 1,
         .fsBase = 0x710020,
+        .rbx = 0x1111,
+        .r12 = 0x2222,
+        .r15 = 0x3333,
+        .rflags = 0x246,
     };
 
     const auto result =
@@ -98,6 +102,10 @@ int main() {
     assert(context.rip == returnAddress);
     assert(context.rsp == rsp + 8);
     assert(context.fsBase == 0x710020);
+    assert(context.rbx == 0x1111);
+    assert(context.r12 == 0x2222);
+    assert(context.r15 == 0x3333);
+    assert(context.rflags == 0x246);
 
     {
         auto unknown = context;
