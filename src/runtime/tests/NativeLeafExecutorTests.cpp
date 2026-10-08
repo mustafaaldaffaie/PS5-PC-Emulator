@@ -35,6 +35,16 @@ std::vector<std::byte> GuestFsCode() {
     };
 }
 
+std::vector<std::byte> GuestResumeCode() {
+    return {
+        std::byte{0x48},
+        std::byte{0x83},
+        std::byte{0xc7},
+        std::byte{0x07},
+        std::byte{0xc3},
+    };
+}
+
 std::vector<std::byte> GuestCode(
     std::uint64_t rbxValue,
     std::uint64_t r12Value) {
@@ -99,6 +109,10 @@ int main() {
         reservationBase + 0x70000ull;
     constexpr std::uint64_t fsCodeAddress =
         codeAddress + 0x100ull;
+    constexpr std::uint64_t resumeCodeAddress =
+        codeAddress + 0x200ull;
+    constexpr std::uint64_t resumeStackPointer =
+        stackAddress + 0x1000ull;
 
     constexpr std::uint64_t expectedRbx =
         0x1122334455667788ull;
@@ -136,6 +150,26 @@ int main() {
         fsCodeAddress,
         fsCode);
 
+    const auto resumeCode =
+        GuestResumeCode();
+    memory.Initialize(
+        resumeCodeAddress,
+        resumeCode);
+
+    NativeLeafExecutor executor;
+
+    std::array<std::byte, sizeof(std::uint64_t)>
+        resumeReturn{};
+    const auto escapeAddress =
+        executor.EscapeAddress();
+    std::memcpy(
+        resumeReturn.data(),
+        &escapeAddress,
+        sizeof(escapeAddress));
+    memory.Initialize(
+        resumeStackPointer,
+        resumeReturn);
+
     std::array<std::byte, sizeof(std::uint64_t)>
         tlsSelf{};
     std::memcpy(
@@ -149,8 +183,6 @@ int main() {
     auto nativeImage =
         NativeImageMaterializer::Materialize(
             memory);
-
-    NativeLeafExecutor executor;
 
     SysvGuestContext context{
         .rdi = 10,
@@ -202,6 +234,26 @@ int main() {
     assert(context.rip == 0);
     assert(context.fsBase == 0);
     assert((context.rflags & 0x2u) != 0);
+
+    {
+        SysvGuestContext resumeContext{
+            .rdi = 10,
+            .rsp = resumeStackPointer,
+            .rip = resumeCodeAddress,
+            .rflags = 0x202,
+        };
+
+        executor.Resume(
+            resumeContext,
+            nativeImage);
+
+        assert(resumeContext.rdi == 17);
+        assert(
+            resumeContext.rsp ==
+            resumeStackPointer +
+                sizeof(std::uint64_t));
+        assert(resumeContext.rip == 0);
+    }
 
     {
         auto tlsContext = context;

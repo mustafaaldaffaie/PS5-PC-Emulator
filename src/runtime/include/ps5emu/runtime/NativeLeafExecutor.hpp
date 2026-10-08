@@ -26,8 +26,16 @@ public:
     [[nodiscard]] static bool
     SupportsGuestFsBase() noexcept;
 
+    [[nodiscard]] std::uint64_t
+    EscapeAddress() const noexcept;
+
     void Run(SysvGuestContext& context,
              const NativeImage& nativeImage);
+
+    // Resumes an already-started guest frame. The current guest RSP must point
+    // at the executor's original synthetic return address.
+    void Resume(SysvGuestContext& context,
+                const NativeImage& nativeImage);
 
 private:
     struct State {
