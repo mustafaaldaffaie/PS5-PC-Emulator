@@ -43,10 +43,17 @@ int main() {
         "TESTNID0001",
         "sceKernelEightArgs",
         [](ps5emu::hle::HleCallFrame& frame) {
+            assert(frame.memory != nullptr);
+
             std::uint64_t sum = 0;
             for (const auto value : frame.arguments) {
                 sum += value;
             }
+
+            const std::array<std::byte, 1> marker{
+                std::byte{0x5a},
+            };
+            frame.memory->Write(0x100080, marker);
 
             frame.returnValue = sum;
             frame.errorCode = -42;
@@ -93,6 +100,7 @@ int main() {
     assert(result.handled);
     assert(result.errorCode == -42);
     assert(context.rax == 36);
+    assert(memory.Read(0x100080, 1)[0] == std::byte{0x5a});
 
     {
         auto unchanged = context;
