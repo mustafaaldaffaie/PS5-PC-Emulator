@@ -1,63 +1,46 @@
 #include <ps5emu/runtime/GuestCallDispatcher.hpp>
 
-#include <algorithm>
+#include <array>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
 
+#include <ps5emu/runtime/GuestMemoryAccessAdapter.hpp>
+
 namespace ps5emu::runtime {
 namespace {
-
-class GuestMemoryAdapter final : public hle::GuestMemoryAccess {
-public:
-    explicit GuestMemoryAdapter(memory::GuestMemory& memory)
-        : memory_(memory) {
-    }
-
-    void Read(std::uint64_t guestAddress,
-              std::span<std::byte> output) const override {
-        if (output.empty()) {
-            return;
-        }
-
-        const auto source =
-            memory_.Read(guestAddress, output.size());
-
-        std::copy(source.begin(), source.end(), output.begin());
-    }
-
-    void Write(std::uint64_t guestAddress,
-               std::span<const std::byte> input) override {
-        memory_.Write(guestAddress, input);
-    }
-
-private:
-    memory::GuestMemory& memory_;
-};
 
 std::uint64_t CheckedAdd(std::uint64_t value,
                          std::uint64_t amount,
                          const char* message) {
-    if (value > std::numeric_limits<std::uint64_t>::max() - amount) {
+    if (value >
+        std::numeric_limits<std::uint64_t>::max() -
+            amount) {
         throw std::runtime_error(message);
     }
 
     return value + amount;
 }
 
-std::uint64_t ReadU64(const memory::GuestMemory& memory,
-                      std::uint64_t address) {
-    const auto bytes = memory.Read(address, sizeof(std::uint64_t));
+std::uint64_t ReadU64(
+    const hle::GuestMemoryAccess& memory,
+    std::uint64_t address) {
+    std::array<std::byte, sizeof(std::uint64_t)> bytes{};
+    memory.Read(
+        address,
+        bytes);
 
     std::uint64_t value = 0;
-    std::memcpy(&value, bytes.data(), sizeof(value));
+    std::memcpy(
+        &value,
+        bytes.data(),
+        sizeof(value));
     return value;
 }
 
 hle::HleCallFrame BuildCallFrame(
     const SysvGuestContext& context,
-    const memory::GuestMemory& memory,
-    hle::GuestMemoryAccess& memoryAccess) {
+    hle::GuestMemoryAccess& memory) {
     hle::HleCallFrame frame;
 
     frame.arguments[0] = context.rdi;
@@ -78,9 +61,15 @@ hle::HleCallFrame BuildCallFrame(
             sizeof(std::uint64_t),
             "Guest stack argument address overflows");
 
-    frame.arguments[6] = ReadU64(memory, argument7Address);
-    frame.arguments[7] = ReadU64(memory, argument8Address);
-    frame.memory = &memoryAccess;
+    frame.arguments[6] =
+        ReadU64(
+            memory,
+            argument7Address);
+    frame.arguments[7] =
+        ReadU64(
+            memory,
+            argument8Address);
+    frame.memory = &memory;
 
     return frame;
 }
@@ -90,19 +79,18 @@ hle::HleCallFrame BuildCallFrame(
 GuestCallDispatchResult GuestCallDispatcher::Dispatch(
     std::uint64_t targetAddress,
     SysvGuestContext& context,
-    memory::GuestMemory& memory,
+    hle::GuestMemoryAccess& memory,
     const hle::HleRegistry& registry,
     const HleThunkTable& thunks) {
-    if (thunks.FindByAddress(targetAddress) == nullptr) {
+    if (thunks.FindByAddress(
+            targetAddress) == nullptr) {
         return {};
     }
 
-    GuestMemoryAdapter memoryAccess(memory);
     auto frame =
         BuildCallFrame(
             context,
-            memory,
-            memoryAccess);
+            memory);
 
     if (!thunks.Dispatch(
             targetAddress,
@@ -111,12 +99,30 @@ GuestCallDispatchResult GuestCallDispatcher::Dispatch(
         return {};
     }
 
-    context.rax = frame.returnValue;
+    context.rax =
+        frame.returnValue;
 
     return GuestCallDispatchResult{
         .handled = true,
         .errorCode = frame.errorCode,
     };
+}
+
+GuestCallDispatchResult GuestCallDispatcher::Dispatch(
+    std::uint64_t targetAddress,
+    SysvGuestContext& context,
+    memory::GuestMemory& memory,
+    const hle::HleRegistry& registry,
+    const HleThunkTable& thunks) {
+    GuestMemoryAccessAdapter memoryAccess(
+        memory);
+
+    return Dispatch(
+        targetAddress,
+        context,
+        memoryAccess,
+        registry,
+        thunks);
 }
 
 } // namespace ps5emu::runtime

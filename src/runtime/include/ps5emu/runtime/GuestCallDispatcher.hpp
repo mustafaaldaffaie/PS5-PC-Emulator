@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include <ps5emu/hle/GuestMemoryAccess.hpp>
 #include <ps5emu/hle/HleRegistry.hpp>
 #include <ps5emu/memory/GuestMemory.hpp>
 #include <ps5emu/runtime/HleThunkTable.hpp>
@@ -38,6 +39,13 @@ struct GuestCallDispatchResult {
 
 class GuestCallDispatcher final {
 public:
+    [[nodiscard]] static GuestCallDispatchResult
+    Dispatch(std::uint64_t targetAddress,
+             SysvGuestContext& context,
+             hle::GuestMemoryAccess& memory,
+             const hle::HleRegistry& registry,
+             const HleThunkTable& thunks);
+
     [[nodiscard]] static GuestCallDispatchResult
     Dispatch(std::uint64_t targetAddress,
              SysvGuestContext& context,
