@@ -24,6 +24,7 @@ struct Image {
     std::vector<Segment> loadSegments;
     std::optional<Segment> dynamicSegment;
     std::optional<Segment> sceDynamicDataSegment;
+    std::optional<Segment> tlsSegment;
 };
 
 class Elf64 final {

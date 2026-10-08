@@ -1,6 +1,7 @@
 #include <ps5emu/elf/Elf64.hpp>
 
 #include <array>
+#include <bit>
 #include <cstring>
 #include <fstream>
 #include <stdexcept>
@@ -19,6 +20,7 @@ constexpr std::uint8_t kElfCurrentVersion = 1;
 constexpr std::uint16_t kMachineX86_64 = 62;
 constexpr std::uint32_t kProgramTypeLoad = 1;
 constexpr std::uint32_t kProgramTypeDynamic = 2;
+constexpr std::uint32_t kProgramTypeTls = 7;
 constexpr std::uint32_t kProgramTypeSceDynamicData = 0x61000000;
 
 template <typename T>
@@ -177,6 +179,32 @@ Image Elf64::Parse(std::span<const std::byte> bytes) {
                 "ELF dynamic segment extends past end of file");
 
             image.dynamicSegment = ToSegment(programHeader);
+            continue;
+        }
+
+        if (programHeader.type == kProgramTypeTls) {
+            if (image.tlsSegment.has_value()) {
+                throw std::runtime_error(
+                    "ELF contains more than one TLS segment");
+            }
+
+            if (programHeader.fileSize > programHeader.memorySize) {
+                throw std::runtime_error(
+                    "ELF TLS file size exceeds memory size");
+            }
+
+            if (programHeader.alignment > 1 &&
+                !std::has_single_bit(programHeader.alignment)) {
+                throw std::runtime_error(
+                    "ELF TLS alignment is not a power of two");
+            }
+
+            ValidateFileRange(
+                bytes,
+                programHeader,
+                "ELF TLS segment extends past end of file");
+
+            image.tlsSegment = ToSegment(programHeader);
             continue;
         }
 

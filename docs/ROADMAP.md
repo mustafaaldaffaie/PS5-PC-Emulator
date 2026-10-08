@@ -42,7 +42,9 @@
 
 ## Phase 4 - Native execution
 
-- [ ] Guest stack and TLS
+- [x] Guest stack mapping
+- [x] PT_TLS parsing and per-thread TLS block initialization
+- [ ] TLS runtime ABI and FS-base integration
 - [ ] Host-call trampolines
 - [ ] Exception handling
 - [ ] Syscall interception strategy
