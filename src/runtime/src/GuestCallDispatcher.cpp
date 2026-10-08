@@ -1,12 +1,39 @@
 #include <ps5emu/runtime/GuestCallDispatcher.hpp>
 
-#include <array>
+#include <algorithm>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
 
 namespace ps5emu::runtime {
 namespace {
+
+class GuestMemoryAdapter final : public hle::GuestMemoryAccess {
+public:
+    explicit GuestMemoryAdapter(memory::GuestMemory& memory)
+        : memory_(memory) {
+    }
+
+    void Read(std::uint64_t guestAddress,
+              std::span<std::byte> output) const override {
+        if (output.empty()) {
+            return;
+        }
+
+        const auto source =
+            memory_.Read(guestAddress, output.size());
+
+        std::copy(source.begin(), source.end(), output.begin());
+    }
+
+    void Write(std::uint64_t guestAddress,
+               std::span<const std::byte> input) override {
+        memory_.Write(guestAddress, input);
+    }
+
+private:
+    memory::GuestMemory& memory_;
+};
 
 std::uint64_t CheckedAdd(std::uint64_t value,
                          std::uint64_t amount,
@@ -29,7 +56,8 @@ std::uint64_t ReadU64(const memory::GuestMemory& memory,
 
 hle::HleCallFrame BuildCallFrame(
     const SysvGuestContext& context,
-    const memory::GuestMemory& memory) {
+    const memory::GuestMemory& memory,
+    hle::GuestMemoryAccess& memoryAccess) {
     hle::HleCallFrame frame;
 
     frame.arguments[0] = context.rdi;
@@ -52,6 +80,7 @@ hle::HleCallFrame BuildCallFrame(
 
     frame.arguments[6] = ReadU64(memory, argument7Address);
     frame.arguments[7] = ReadU64(memory, argument8Address);
+    frame.memory = &memoryAccess;
 
     return frame;
 }
@@ -61,14 +90,19 @@ hle::HleCallFrame BuildCallFrame(
 GuestCallDispatchResult GuestCallDispatcher::Dispatch(
     std::uint64_t targetAddress,
     SysvGuestContext& context,
-    const memory::GuestMemory& memory,
+    memory::GuestMemory& memory,
     const hle::HleRegistry& registry,
     const HleThunkTable& thunks) {
     if (thunks.FindByAddress(targetAddress) == nullptr) {
         return {};
     }
 
-    auto frame = BuildCallFrame(context, memory);
+    GuestMemoryAdapter memoryAccess(memory);
+    auto frame =
+        BuildCallFrame(
+            context,
+            memory,
+            memoryAccess);
 
     if (!thunks.Dispatch(
             targetAddress,

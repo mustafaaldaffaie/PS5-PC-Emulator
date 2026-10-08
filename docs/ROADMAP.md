@@ -30,14 +30,16 @@
 ## Phase 3 - HLE
 
 - [x] Qualified SCE import identity decoding
-- [ ] NID name database and forward hashing
+- [x] NID name database and forward hashing
 - [x] HLE service registry foundation
 - [x] Synthetic guest thunk allocation and relocation binding
 - [x] Guest-call ABI dispatch (integer/pointer baseline)
+- [x] HLE guest-memory access interface
 - [ ] Threading primitives
 - [ ] Time and synchronization
 - [ ] Filesystem
-- [ ] Basic libc bridge
+- [x] Basic libc memory bridge (memcpy/memmove/memset)
+- [ ] Additional libc coverage
 - [ ] Module loader
 
 ## Phase 4 - Native execution

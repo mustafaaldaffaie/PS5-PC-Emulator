@@ -29,7 +29,7 @@ public:
     [[nodiscard]] static GuestCallDispatchResult
     Dispatch(std::uint64_t targetAddress,
              SysvGuestContext& context,
-             const memory::GuestMemory& memory,
+             memory::GuestMemory& memory,
              const hle::HleRegistry& registry,
              const HleThunkTable& thunks);
 };
