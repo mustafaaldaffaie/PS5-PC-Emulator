@@ -331,6 +331,161 @@ void CopyMemoryBsd(HleCallFrame& frame) {
     frame.returnValue = 0;
 }
 
+
+void FindStringByte(HleCallFrame& frame,
+                    bool last) {
+    const auto address = frame.arguments[0];
+    const auto target =
+        static_cast<std::byte>(frame.arguments[1] & 0xffu);
+    auto& memory = RequireMemory(frame);
+
+    std::uint64_t found = 0;
+
+    for (std::uint64_t index = 0;; ++index) {
+        const auto currentAddress =
+            CheckedAddress(address, index);
+        const auto value =
+            ReadByte(memory, currentAddress);
+
+        if (value == target) {
+            found = currentAddress;
+            if (!last) {
+                frame.returnValue = found;
+                return;
+            }
+        }
+
+        if (value == std::byte{0}) {
+            frame.returnValue = found;
+            return;
+        }
+
+        if (index ==
+            std::numeric_limits<std::uint64_t>::max()) {
+            throw std::runtime_error(
+                "Guest libc string search overflows");
+        }
+    }
+}
+
+void FindSubstring(HleCallFrame& frame) {
+    const auto haystack = frame.arguments[0];
+    const auto needle = frame.arguments[1];
+    auto& memory = RequireMemory(frame);
+
+    if (ReadByte(memory, needle) == std::byte{0}) {
+        frame.returnValue = haystack;
+        return;
+    }
+
+    for (std::uint64_t start = 0;; ++start) {
+        const auto first =
+            ReadByte(
+                memory,
+                CheckedAddress(haystack, start));
+
+        if (first == std::byte{0}) {
+            frame.returnValue = 0;
+            return;
+        }
+
+        bool matched = true;
+
+        for (std::uint64_t index = 0;; ++index) {
+            const auto needleByte =
+                ReadByte(
+                    memory,
+                    CheckedAddress(needle, index));
+
+            if (needleByte == std::byte{0}) {
+                break;
+            }
+
+            const auto haystackByte =
+                ReadByte(
+                    memory,
+                    CheckedAddress(
+                        CheckedAddress(haystack, start),
+                        index));
+
+            if (haystackByte != needleByte) {
+                matched = false;
+                break;
+            }
+
+            if (haystackByte == std::byte{0}) {
+                matched = false;
+                break;
+            }
+        }
+
+        if (matched) {
+            frame.returnValue =
+                CheckedAddress(haystack, start);
+            return;
+        }
+
+        if (start ==
+            std::numeric_limits<std::uint64_t>::max()) {
+            throw std::runtime_error(
+                "Guest libc substring search overflows");
+        }
+    }
+}
+
+std::uint64_t FindStringEnd(
+    GuestMemoryAccess& memory,
+    std::uint64_t address) {
+    for (std::uint64_t index = 0;; ++index) {
+        const auto current =
+            CheckedAddress(address, index);
+
+        if (ReadByte(memory, current) == std::byte{0}) {
+            return current;
+        }
+
+        if (index ==
+            std::numeric_limits<std::uint64_t>::max()) {
+            throw std::runtime_error(
+                "Guest libc string end search overflows");
+        }
+    }
+}
+
+void AppendString(HleCallFrame& frame,
+                  bool bounded) {
+    const auto destination = frame.arguments[0];
+    const auto source = frame.arguments[1];
+    const auto maximum =
+        bounded ? frame.arguments[2]
+                : std::numeric_limits<std::uint64_t>::max();
+
+    auto& memory = RequireMemory(frame);
+    const auto appendAddress =
+        FindStringEnd(memory, destination);
+
+    std::vector<std::byte> buffer;
+
+    for (std::uint64_t index = 0;
+         index < maximum;
+         ++index) {
+        const auto value =
+            ReadByte(
+                memory,
+                CheckedAddress(source, index));
+
+        if (value == std::byte{0}) {
+            break;
+        }
+
+        buffer.push_back(value);
+    }
+
+    buffer.push_back(std::byte{0});
+    memory.Write(appendAddress, buffer);
+    frame.returnValue = destination;
+}
+
 void StringLength(HleCallFrame& frame) {
     const auto address = frame.arguments[0];
     auto& memory = RequireMemory(frame);
@@ -447,6 +602,40 @@ void BasicLibc::Register(HleRegistry& registry,
         moduleName,
         "bcopy",
         CopyMemoryBsd);
+
+
+    registry.RegisterSymbol(
+        moduleName,
+        "strchr",
+        [](HleCallFrame& frame) {
+            FindStringByte(frame, false);
+        });
+
+    registry.RegisterSymbol(
+        moduleName,
+        "strrchr",
+        [](HleCallFrame& frame) {
+            FindStringByte(frame, true);
+        });
+
+    registry.RegisterSymbol(
+        moduleName,
+        "strstr",
+        FindSubstring);
+
+    registry.RegisterSymbol(
+        moduleName,
+        "strcat",
+        [](HleCallFrame& frame) {
+            AppendString(frame, false);
+        });
+
+    registry.RegisterSymbol(
+        moduleName,
+        "strncat",
+        [](HleCallFrame& frame) {
+            AppendString(frame, true);
+        });
 
     registry.RegisterSymbol(
         moduleName,
