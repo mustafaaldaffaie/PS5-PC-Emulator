@@ -48,7 +48,8 @@
 - [x] PT_TLS parsing and per-thread TLS block initialization
 - [x] TLS runtime ABI and FS-base integration
 - [x] HLE INT3 trap/return control-flow baseline
-- [ ] Native Windows/Linux exception hookup
+- [x] Native Windows/Linux exception hookup
+- [x] Native guest/HLE execution and resume loop
 - [ ] Host-call trampolines beyond trap slots
 - [ ] Syscall interception strategy
 - [ ] AMD-only instruction handling
