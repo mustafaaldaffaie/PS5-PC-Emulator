@@ -17,9 +17,8 @@ addresses into relocation targets.
 ## Synthetic HLE thunks
 
 The thunk table reserves an executable guest-memory arena. Each HLE service is
-assigned one stable slot. Current slots contain trap bytes rather than native
-host-call machine code. A future execution backend can intercept entry into a
-slot and dispatch the corresponding HLE service.
+assigned one stable slot. Current slots contain INT3 trap bytes rather than
+native host-call machine code.
 
 ## Guest-call ABI dispatch
 
@@ -28,11 +27,23 @@ the x86-64 System V ABI used by the guest-facing HLE call frame:
 
 - arguments 1 through 6 come from RDI, RSI, RDX, RCX, R8, and R9;
 - arguments 7 and 8 are read from the stack after the return address;
+- guest-memory access is attached to the HLE frame;
 - the HLE return value is copied back to RAX;
 - the HLE frame error field is returned to the host-side dispatcher caller.
 
+## INT3 trap completion
+
+HleTrapHandler models the control-flow side of an intercepted HLE thunk. x86
+advances RIP past an INT3 before reporting a breakpoint, so the handler looks
+up the thunk at RIP minus one. It validates the guest return address, dispatches
+the HLE service, consumes the return address from the guest stack, and resumes
+at that address.
+
+This is deliberately OS-neutral. Windows vectored/structured exception
+integration and Linux signal handling are not implemented yet.
+
 Floating-point/vector arguments, variadic metadata, structure-return rules,
-and native trap integration are not implemented yet.
+and native exception hookup remain future work.
 
 ## Preparation flow
 
