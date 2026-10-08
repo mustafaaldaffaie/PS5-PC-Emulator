@@ -33,7 +33,7 @@
 - [ ] NID name database and forward hashing
 - [x] HLE service registry foundation
 - [x] Synthetic guest thunk allocation and relocation binding
-- [ ] Guest-call ABI dispatch
+- [x] Guest-call ABI dispatch (integer/pointer baseline)
 - [ ] Threading primitives
 - [ ] Time and synchronization
 - [ ] Filesystem
