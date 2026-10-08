@@ -14,6 +14,7 @@ endif()
 
 add_subdirectory(src/core)
 add_subdirectory(src/hle)
+add_subdirectory(src/runtime)
 add_subdirectory(src/app)
 
 if(PS5EMU_BUILD_FRONTEND)
