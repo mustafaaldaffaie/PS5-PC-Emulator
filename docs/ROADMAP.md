@@ -36,7 +36,8 @@
 - [x] Guest-call ABI dispatch (integer/pointer baseline)
 - [x] HLE guest-memory access interface
 - [x] Thread identity/equality/yield baseline
-- [ ] Thread creation/join and synchronization primitives
+- [x] Mutex and mutex-attribute synchronization baseline
+- [ ] Thread creation/join and condition-variable primitives
 - [ ] Time and synchronization
 - [ ] Filesystem
 - [x] Basic libc memory bridge (memcpy/memmove/memset)
