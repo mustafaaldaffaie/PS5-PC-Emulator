@@ -1,5 +1,6 @@
 add_library(ps5emu_hle STATIC
     src/BasicLibc.cpp
+    src/BuiltinServices.cpp
     src/HleRegistry.cpp
     src/KernelTime.cpp
     src/Nid.cpp
@@ -44,4 +45,11 @@ if(PS5EMU_BUILD_TESTS)
     target_link_libraries(ps5emu_kernel_time_tests
         PRIVATE ps5emu_hle ps5emu_test_options)
     add_test(NAME kernel_time COMMAND ps5emu_kernel_time_tests)
+
+    add_executable(ps5emu_builtin_services_tests
+        tests/BuiltinServicesTests.cpp
+    )
+    target_link_libraries(ps5emu_builtin_services_tests
+        PRIVATE ps5emu_hle ps5emu_test_options)
+    add_test(NAME builtin_services COMMAND ps5emu_builtin_services_tests)
 endif()
