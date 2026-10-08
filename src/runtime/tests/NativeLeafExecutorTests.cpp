@@ -96,7 +96,7 @@ int main() {
     constexpr std::uint64_t stackSize =
         0x4000ull;
     constexpr std::uint64_t tlsAddress =
-        reservationBase + 0x30000ull;
+        reservationBase + 0x70000ull;
     constexpr std::uint64_t fsCodeAddress =
         codeAddress + 0x100ull;
 
