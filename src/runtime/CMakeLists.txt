@@ -9,6 +9,7 @@ add_library(ps5emu_runtime STATIC
     src/NativeContextAdapter.cpp
     src/NativeExecutionBuilder.cpp
     src/NativeImageMaterializer.cpp
+    src/NativeLeafExecutor.cpp
     src/NativeMemoryRegion.cpp
     src/SceExecutablePreparer.cpp
     src/SceImportResolver.cpp
@@ -108,4 +109,11 @@ if(PS5EMU_BUILD_TESTS)
     target_link_libraries(ps5emu_native_execution_builder_tests
         PRIVATE ps5emu_runtime ps5emu_test_options)
     add_test(NAME native_execution_builder COMMAND ps5emu_native_execution_builder_tests)
+
+    add_executable(ps5emu_native_leaf_executor_tests
+        tests/NativeLeafExecutorTests.cpp
+    )
+    target_link_libraries(ps5emu_native_leaf_executor_tests
+        PRIVATE ps5emu_runtime ps5emu_test_options)
+    add_test(NAME native_leaf_executor COMMAND ps5emu_native_leaf_executor_tests)
 endif()
