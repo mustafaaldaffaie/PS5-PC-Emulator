@@ -82,7 +82,8 @@ NativeHleExecutionResult NativeHleExecutor::Run(
             const auto syscallResult =
                 syscallDispatcher_.Dispatch(
                     context,
-                    capturedBreakpoint);
+                    capturedBreakpoint,
+                    &nativeMemory);
 
             result.syscallNumber =
                 syscallResult.syscallNumber;

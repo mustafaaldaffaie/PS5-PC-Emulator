@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include <ps5emu/hle/GuestMemoryAccess.hpp>
 #include <ps5emu/runtime/GuestCallDispatcher.hpp>
 
 namespace ps5emu::runtime {
@@ -27,7 +28,8 @@ public:
 
     [[nodiscard]] NativeSyscallDispatchResult
     Dispatch(SysvGuestContext& context,
-             std::uint64_t syscallAddress) const;
+             std::uint64_t syscallAddress,
+             hle::GuestMemoryAccess* memory = nullptr) const;
 
 private:
     GuestProcessIdentity identity_{};
