@@ -61,12 +61,11 @@ bool NidNameDatabase::Add(std::string symbolName) {
             "NID database symbol name cannot contain null bytes");
     }
 
-    const auto existingByName = nameToNid_.find(symbolName);
-    if (existingByName != nameToNid_.end()) {
+    if (nameToNid_.contains(symbolName)) {
         return false;
     }
 
-    auto nid = Nid::Compute(symbolName);
+    const auto nid = Nid::Compute(symbolName);
 
     const auto existingByNid = nidToName_.find(nid);
     if (existingByNid != nidToName_.end() &&
@@ -75,14 +74,32 @@ bool NidNameDatabase::Add(std::string symbolName) {
             "NID collision detected between symbol names");
     }
 
-    auto storedName = symbolName;
-    nameToNid_.emplace(std::move(symbolName), nid);
-    nidToName_.emplace(std::move(nid), std::move(storedName));
+    const auto [nameIterator, nameInserted] =
+        nameToNid_.emplace(symbolName, nid);
+    if (!nameInserted) {
+        return false;
+    }
+
+    try {
+        const auto [nidIterator, nidInserted] =
+            nidToName_.emplace(nid, std::move(symbolName));
+        static_cast<void>(nidIterator);
+
+        if (!nidInserted) {
+            nameToNid_.erase(nameIterator);
+            throw std::runtime_error(
+                "NID database reverse mapping already exists");
+        }
+    } catch (...) {
+        nameToNid_.erase(nameIterator);
+        throw;
+    }
+
     return true;
 }
 
 const std::string* NidNameDatabase::FindName(
-    std::string_view nid) const noexcept {
+    std::string_view nid) const {
     const auto found = nidToName_.find(std::string(nid));
     if (found == nidToName_.end()) {
         return nullptr;
@@ -92,7 +109,7 @@ const std::string* NidNameDatabase::FindName(
 }
 
 const std::string* NidNameDatabase::FindNid(
-    std::string_view symbolName) const noexcept {
+    std::string_view symbolName) const {
     const auto found = nameToNid_.find(std::string(symbolName));
     if (found == nameToNid_.end()) {
         return nullptr;

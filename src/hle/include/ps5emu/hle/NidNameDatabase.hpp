@@ -14,10 +14,10 @@ public:
     [[nodiscard]] bool Add(std::string symbolName);
 
     [[nodiscard]] const std::string*
-    FindName(std::string_view nid) const noexcept;
+    FindName(std::string_view nid) const;
 
     [[nodiscard]] const std::string*
-    FindNid(std::string_view symbolName) const noexcept;
+    FindNid(std::string_view symbolName) const;
 
     [[nodiscard]] std::size_t Size() const noexcept;
 
