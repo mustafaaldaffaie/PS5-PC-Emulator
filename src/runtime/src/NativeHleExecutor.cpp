@@ -14,7 +14,8 @@ NativeHleExecutionResult NativeHleExecutor::Run(
     NativeImage& nativeImage,
     const hle::HleRegistry& registry,
     const HleThunkTable& thunks,
-    std::span<const NativeSyscallTrap> syscallTraps) {
+    std::span<const NativeSyscallTrap> syscallTraps,
+    hle::GuestThreadAccess* threads) {
     NativeHleExecutionResult result;
 
     if (thunks.Size() == 0 &&
@@ -107,7 +108,8 @@ NativeHleExecutionResult NativeHleExecutor::Run(
                 context,
                 nativeMemory,
                 registry,
-                thunks);
+                thunks,
+                threads);
 
         if (!trapResult.handled) {
             throw std::runtime_error(

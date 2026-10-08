@@ -10,6 +10,7 @@ add_library(ps5emu_runtime STATIC
     src/NativeContextAdapter.cpp
     src/NativeExecutionBuilder.cpp
     src/NativeGuestMemoryAccess.cpp
+    src/NativeGuestThreadRuntime.cpp
     src/NativeHleExecutor.cpp
     src/NativeHleTrapBridge.cpp
     src/NativeImageMaterializer.cpp
@@ -144,6 +145,20 @@ if(PS5EMU_BUILD_TESTS)
     target_link_libraries(ps5emu_native_hle_executor_tests
         PRIVATE ps5emu_runtime ps5emu_test_options)
     add_test(NAME native_hle_executor COMMAND ps5emu_native_hle_executor_tests)
+
+    add_executable(ps5emu_native_guest_thread_runtime_tests
+        tests/NativeGuestThreadRuntimeTests.cpp
+    )
+    target_link_libraries(ps5emu_native_guest_thread_runtime_tests
+        PRIVATE ps5emu_runtime ps5emu_test_options)
+    add_test(NAME native_guest_thread_runtime COMMAND ps5emu_native_guest_thread_runtime_tests)
+
+    add_executable(ps5emu_native_guest_thread_runtime_hle_tests
+        tests/NativeGuestThreadRuntimeHleTests.cpp
+    )
+    target_link_libraries(ps5emu_native_guest_thread_runtime_hle_tests
+        PRIVATE ps5emu_runtime ps5emu_test_options)
+    add_test(NAME native_guest_thread_runtime_hle COMMAND ps5emu_native_guest_thread_runtime_hle_tests)
 
     add_executable(ps5emu_native_syscall_dispatcher_tests
         tests/NativeSyscallDispatcherTests.cpp

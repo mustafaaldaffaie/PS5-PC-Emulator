@@ -10,6 +10,24 @@
 
 namespace {
 
+class TestThreads final
+    : public ps5emu::hle::GuestThreadAccess {
+public:
+    ps5emu::hle::GuestThreadCreateResult Create(
+        const ps5emu::hle::GuestThreadCreateRequest&) override {
+        return {};
+    }
+
+    ps5emu::hle::GuestThreadJoinResult Join(
+        std::uint64_t) override {
+        return {};
+    }
+
+    std::uint64_t CurrentThreadHandle() const noexcept override {
+        return 0x7777;
+    }
+};
+
 void WriteU64(ps5emu::memory::GuestMemory& memory,
               std::uint64_t address,
               std::uint64_t value) {
@@ -44,6 +62,8 @@ int main() {
         "sceKernelEightArgs",
         [](ps5emu::hle::HleCallFrame& frame) {
             assert(frame.memory != nullptr);
+            assert(frame.threads != nullptr);
+            assert(frame.threads->CurrentThreadHandle() == 0x7777);
 
             std::uint64_t sum = 0;
             for (const auto value : frame.arguments) {
@@ -99,13 +119,16 @@ int main() {
         .rflags = 0x246,
     };
 
+    TestThreads threads;
+
     const auto result =
         GuestCallDispatcher::Dispatch(
             thunkAddress,
             context,
             memory,
             registry,
-            thunks);
+            thunks,
+            &threads);
 
     assert(result.handled);
     assert(result.errorCode == -42);
@@ -132,7 +155,8 @@ int main() {
                 unchanged,
                 memory,
                 registry,
-                thunks);
+                thunks,
+                &threads);
 
         assert(!missing.handled);
         assert(missing.errorCode == 0);
@@ -152,7 +176,8 @@ int main() {
                     overflowing,
                     memory,
                     registry,
-                    thunks));
+                    thunks,
+                    &threads));
         }));
     }
 

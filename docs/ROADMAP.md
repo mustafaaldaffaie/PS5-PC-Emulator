@@ -37,7 +37,8 @@
 - [x] HLE guest-memory access interface
 - [x] Thread identity/equality/yield baseline
 - [x] Mutex and mutex-attribute synchronization baseline
-- [ ] Thread creation/join and condition-variable primitives
+- [x] Thread creation/join runtime baseline
+- [x] Condition-variable primitives
 - [ ] Time and synchronization
 - [ ] Filesystem
 - [x] Basic libc memory bridge (memcpy/memmove/memset)
@@ -52,6 +53,7 @@
 - [x] HLE INT3 trap/return control-flow baseline
 - [x] Native Windows/Linux exception hookup
 - [x] Native guest/HLE execution and resume loop
+- [x] Concurrent native guest-thread trap routing
 - [ ] Host-call trampolines beyond trap slots
 - [x] Syscall interception strategy
 - [ ] AMD-only instruction handling

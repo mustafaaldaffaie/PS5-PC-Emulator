@@ -13,6 +13,7 @@
 #include <ps5emu/hle/BuiltinServices.hpp>
 #include <ps5emu/memory/GuestMemory.hpp>
 #include <ps5emu/runtime/NativeExecutionBuilder.hpp>
+#include <ps5emu/runtime/NativeGuestThreadRuntime.hpp>
 #include <ps5emu/runtime/NativeHleExecutor.hpp>
 #include <ps5emu/runtime/SceExecutablePreparer.hpp>
 
@@ -119,6 +120,14 @@ int RunNativeExecutable(
             "Native execution requires all non-weak imports to resolve");
     }
 
+    ps5emu::runtime::NativeGuestThreadRuntime threadRuntime(
+        bytes,
+        ps5emu::elf::Elf64::Parse(bytes),
+        prepared.nativeImage,
+        prepared.guest.registry,
+        prepared.guest.thunks,
+        prepared.syscallTraps);
+
     ps5emu::runtime::NativeHleExecutor executor;
     const auto result =
         executor.Run(
@@ -126,7 +135,8 @@ int RunNativeExecutable(
             prepared.nativeImage,
             prepared.guest.registry,
             prepared.guest.thunks,
-            prepared.syscallTraps);
+            prepared.syscallTraps,
+            &threadRuntime);
 
     if (result.interceptedSyscall) {
         std::cout << "Intercepted unsupported guest syscall "
