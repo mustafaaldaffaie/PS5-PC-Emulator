@@ -7,6 +7,15 @@
 #include <type_traits>
 #include <vector>
 
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#elif defined(__linux__)
+#include <sys/auxv.h>
+#endif
+
 namespace ps5emu::runtime {
 namespace {
 
@@ -175,6 +184,77 @@ public:
         Byte(0x24);
     }
 
+    void TestRegReg(Register reg) {
+        const auto id = RegisterId(reg);
+
+        std::uint8_t rex = 0x48;
+        if (id >= 8) {
+            rex |= 0x05;
+        }
+
+        Byte(rex);
+        Byte(0x85);
+        Byte(static_cast<std::uint8_t>(
+            0xc0 |
+            ((id & 7u) << 3u) |
+            (id & 7u)));
+    }
+
+    [[nodiscard]] std::size_t JzRel32() {
+        Byte(0x0f);
+        Byte(0x84);
+        const auto displacementOffset = bytes_.size();
+        U32(0);
+        return displacementOffset;
+    }
+
+    [[nodiscard]] std::size_t Position() const noexcept {
+        return bytes_.size();
+    }
+
+    void PatchRel32(std::size_t displacementOffset,
+                    std::size_t targetOffset) {
+        if (displacementOffset + 4 > bytes_.size()) {
+            throw std::out_of_range(
+                "Native trampoline branch patch is outside emitted code");
+        }
+
+        const auto nextInstruction =
+            displacementOffset + 4;
+
+        const auto delta =
+            static_cast<std::int64_t>(targetOffset) -
+            static_cast<std::int64_t>(nextInstruction);
+
+        if (delta <
+                std::numeric_limits<std::int32_t>::min() ||
+            delta >
+                std::numeric_limits<std::int32_t>::max()) {
+            throw std::overflow_error(
+                "Native trampoline branch exceeds rel32 range");
+        }
+
+        const auto encoded =
+            static_cast<std::uint32_t>(
+                static_cast<std::int32_t>(delta));
+
+        for (unsigned shift = 0;
+             shift < 32;
+             shift += 8) {
+            bytes_[displacementOffset + shift / 8] =
+                static_cast<std::byte>(
+                    encoded >> shift);
+        }
+    }
+
+    void ReadFsBase(Register reg) {
+        EmitFsBase(0, reg);
+    }
+
+    void WriteFsBase(Register reg) {
+        EmitFsBase(2, reg);
+    }
+
     void Ret() {
         Byte(0xc3);
     }
@@ -195,6 +275,26 @@ public:
     }
 
 private:
+    void EmitFsBase(std::uint8_t extension,
+                    Register reg) {
+        const auto id = RegisterId(reg);
+
+        Byte(0xf3);
+
+        std::uint8_t rex = 0x48;
+        if (id >= 8) {
+            rex |= 0x01;
+        }
+
+        Byte(rex);
+        Byte(0x0f);
+        Byte(0xae);
+        Byte(static_cast<std::uint8_t>(
+            0xc0 |
+            ((extension & 7u) << 3u) |
+            (id & 7u)));
+    }
+
     void EmitMemoryMove(std::uint8_t opcode,
                         Register regField,
                         Register base,
@@ -284,6 +384,26 @@ const NativeImageMapping* FindMapping(
     return nullptr;
 }
 
+bool GuestFsBaseAvailable() noexcept {
+#if defined(_WIN32)
+#ifdef PF_RDWRFSGSBASE_AVAILABLE
+    return IsProcessorFeaturePresent(
+        PF_RDWRFSGSBASE_AVAILABLE) != 0;
+#else
+    return false;
+#endif
+#elif defined(__linux__)
+#ifdef AT_HWCAP2
+    constexpr unsigned long kHwcap2Fsgsbase =
+        1ul << 1u;
+    return (getauxval(AT_HWCAP2) &
+            kHwcap2Fsgsbase) != 0;
+#else
+    return false;
+#endif
+#endif
+}
+
 std::int32_t CheckedDisplacement(
     std::size_t value) {
     if (value >
@@ -298,6 +418,10 @@ std::int32_t CheckedDisplacement(
 
 } // namespace
 
+bool NativeLeafExecutor::SupportsGuestFsBase() noexcept {
+    return GuestFsBaseAvailable();
+}
+
 NativeLeafExecutor::NativeLeafExecutor()
     : code_(
           NativeMemoryRegion::Allocate(
@@ -309,8 +433,24 @@ void NativeLeafExecutor::Run(
     SysvGuestContext& context,
     const NativeImage& nativeImage) {
     if (context.fsBase != 0) {
-        throw std::runtime_error(
-            "Native leaf execution does not yet support a guest FS base");
+        if (!SupportsGuestFsBase()) {
+            throw std::runtime_error(
+                "Host OS does not expose user-mode FSGSBASE");
+        }
+
+        const auto* tlsMapping =
+            FindMapping(
+                nativeImage,
+                context.fsBase,
+                sizeof(std::uint64_t));
+
+        if (tlsMapping == nullptr ||
+            !memory::HasProtection(
+                tlsMapping->protection,
+                memory::Protection::Read)) {
+            throw std::runtime_error(
+                "Guest FS base is not backed by readable native memory");
+        }
     }
 
     const auto* codeMapping =
@@ -350,6 +490,7 @@ void NativeLeafExecutor::Run(
     state_.output = context;
     state_.hostRsp = 0;
     state_.hostRflags = 0;
+    state_.hostFsBase = 0;
     state_.savedGuestRax = 0;
 
     using Trampoline = void (*)();
@@ -431,6 +572,32 @@ void NativeLeafExecutor::BuildTrampoline() {
         stateOffset(
             offsetof(State, hostRsp)),
         Register::Rsp);
+
+    emitter.MovRegMemDisp32(
+        Register::R10,
+        Register::R11,
+        inputOffset(
+            offsetof(SysvGuestContext, fsBase)));
+    emitter.TestRegReg(Register::R10);
+    const auto skipGuestFsSetup =
+        emitter.JzRel32();
+
+    emitter.ReadFsBase(Register::R10);
+    emitter.MovMemDisp32Reg(
+        Register::R11,
+        stateOffset(
+            offsetof(State, hostFsBase)),
+        Register::R10);
+    emitter.MovRegMemDisp32(
+        Register::R10,
+        Register::R11,
+        inputOffset(
+            offsetof(SysvGuestContext, fsBase)));
+    emitter.WriteFsBase(Register::R10);
+
+    emitter.PatchRel32(
+        skipGuestFsSetup,
+        emitter.Position());
 
     emitter.MovRegMemDisp32(
         Register::Rax,
@@ -565,6 +732,32 @@ void NativeLeafExecutor::BuildTrampoline() {
     emitter.MovMemDisp32Reg(
         Register::Rax,
         outputOffset(
+            offsetof(SysvGuestContext, r10)),
+        Register::R10);
+
+    emitter.MovRegMemDisp32(
+        Register::R10,
+        Register::Rax,
+        inputOffset(
+            offsetof(SysvGuestContext, fsBase)));
+    emitter.TestRegReg(Register::R10);
+    const auto skipHostFsRestore =
+        emitter.JzRel32();
+
+    emitter.MovRegMemDisp32(
+        Register::R10,
+        Register::Rax,
+        stateOffset(
+            offsetof(State, hostFsBase)));
+    emitter.WriteFsBase(Register::R10);
+
+    emitter.PatchRel32(
+        skipHostFsRestore,
+        emitter.Position());
+
+    emitter.MovMemDisp32Reg(
+        Register::Rax,
+        outputOffset(
             offsetof(SysvGuestContext, rdi)),
         Register::Rdi);
     emitter.MovMemDisp32Reg(
@@ -607,11 +800,6 @@ void NativeLeafExecutor::BuildTrampoline() {
         outputOffset(
             offsetof(SysvGuestContext, rbp)),
         Register::Rbp);
-    emitter.MovMemDisp32Reg(
-        Register::Rax,
-        outputOffset(
-            offsetof(SysvGuestContext, r10)),
-        Register::R10);
     emitter.MovMemDisp32Reg(
         Register::Rax,
         outputOffset(

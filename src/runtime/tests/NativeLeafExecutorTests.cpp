@@ -20,6 +20,21 @@ bool Throws(Function&& function) {
     }
 }
 
+std::vector<std::byte> GuestFsCode() {
+    return {
+        std::byte{0x64},
+        std::byte{0x48},
+        std::byte{0x8b},
+        std::byte{0x04},
+        std::byte{0x25},
+        std::byte{0x00},
+        std::byte{0x00},
+        std::byte{0x00},
+        std::byte{0x00},
+        std::byte{0xc3},
+    };
+}
+
 std::vector<std::byte> GuestCode(
     std::uint64_t rbxValue,
     std::uint64_t r12Value) {
@@ -80,6 +95,10 @@ int main() {
         reservationBase + 0x20000ull;
     constexpr std::uint64_t stackSize =
         0x4000ull;
+    constexpr std::uint64_t tlsAddress =
+        reservationBase + 0x30000ull;
+    constexpr std::uint64_t fsCodeAddress =
+        codeAddress + 0x100ull;
 
     constexpr std::uint64_t expectedRbx =
         0x1122334455667788ull;
@@ -97,6 +116,11 @@ int main() {
         static_cast<std::size_t>(stackSize),
         Protection::Read |
             Protection::Write);
+    memory.Map(
+        tlsAddress,
+        0x1000,
+        Protection::Read |
+            Protection::Write);
 
     const auto code =
         GuestCode(
@@ -105,6 +129,22 @@ int main() {
     memory.Initialize(
         codeAddress,
         code);
+
+    const auto fsCode =
+        GuestFsCode();
+    memory.Initialize(
+        fsCodeAddress,
+        fsCode);
+
+    std::array<std::byte, sizeof(std::uint64_t)>
+        tlsSelf{};
+    std::memcpy(
+        tlsSelf.data(),
+        &tlsAddress,
+        sizeof(tlsAddress));
+    memory.Initialize(
+        tlsAddress,
+        tlsSelf);
 
     auto nativeImage =
         NativeImageMaterializer::Materialize(
@@ -165,15 +205,26 @@ int main() {
 
     {
         auto tlsContext = context;
-        tlsContext.rip = codeAddress;
+        tlsContext.rip = fsCodeAddress;
         tlsContext.rsp = initialRsp;
-        tlsContext.fsBase = 0x1234;
+        tlsContext.fsBase = tlsAddress;
 
-        assert(Throws<std::runtime_error>([&] {
+        if (NativeLeafExecutor::SupportsGuestFsBase()) {
             executor.Run(
                 tlsContext,
                 nativeImage);
-        }));
+
+            assert(tlsContext.rax == tlsAddress);
+            assert(tlsContext.rsp == initialRsp);
+            assert(tlsContext.rip == 0);
+            assert(tlsContext.fsBase == tlsAddress);
+        } else {
+            assert(Throws<std::runtime_error>([&] {
+                executor.Run(
+                    tlsContext,
+                    nativeImage);
+            }));
+        }
     }
 
     {
