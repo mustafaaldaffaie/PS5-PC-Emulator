@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
-#include <string>
 #include <vector>
 
 namespace {
@@ -98,9 +97,19 @@ int main() {
         const auto metadata =
             ps5emu::elf::DynamicMetadataParser::Parse(bytes, image);
 
-        assert(metadata.stringTableAddress == 0x4000c0);
+        assert(metadata.stringTable.has_value());
+        assert(metadata.stringTable->value == 0x4000c0);
+        assert(
+            metadata.stringTable->kind ==
+            ps5emu::elf::DynamicReferenceKind::VirtualAddress);
         assert(metadata.stringTableSize == 24);
-        assert(metadata.symbolTableAddress == 0x4000e0);
+
+        assert(metadata.symbolTable.has_value());
+        assert(metadata.symbolTable->value == 0x4000e0);
+        assert(
+            metadata.symbolTable->kind ==
+            ps5emu::elf::DynamicReferenceKind::VirtualAddress);
+
         assert(metadata.neededLibraries.size() == 2);
         assert(metadata.neededLibraries[0] == "libkernel.prx");
         assert(metadata.neededLibraries[1] == "libc.prx");

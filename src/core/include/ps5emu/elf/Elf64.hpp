@@ -23,6 +23,7 @@ struct Image {
     std::uint64_t entryPoint = 0;
     std::vector<Segment> loadSegments;
     std::optional<Segment> dynamicSegment;
+    std::optional<Segment> sceDynamicDataSegment;
 };
 
 class Elf64 final {

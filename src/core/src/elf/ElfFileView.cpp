@@ -14,6 +14,27 @@ std::size_t CheckedSize(std::uint64_t value, const char* message) {
     return static_cast<std::size_t>(value);
 }
 
+std::size_t CheckedFileOffset(std::span<const std::byte> bytes,
+                              std::uint64_t base,
+                              std::uint64_t delta,
+                              std::size_t requiredSize,
+                              const char* message) {
+    if (base > std::numeric_limits<std::uint64_t>::max() - delta) {
+        throw std::runtime_error(message);
+    }
+
+    const auto offset = CheckedSize(
+        base + delta,
+        "ELF file offset is too large for this host");
+
+    if (offset > bytes.size() ||
+        requiredSize > bytes.size() - offset) {
+        throw std::runtime_error(message);
+    }
+
+    return offset;
+}
+
 } // namespace
 
 ElfFileView::ElfFileView(std::span<const std::byte> bytes,
@@ -42,27 +63,52 @@ std::size_t ElfFileView::ResolveFileOffset(
             continue;
         }
 
-        if (segment.fileOffset >
-            std::numeric_limits<std::uint64_t>::max() - delta) {
-            throw std::runtime_error("ELF file offset overflows");
-        }
-
-        const auto fileOffset = segment.fileOffset + delta;
-        const auto hostOffset =
-            CheckedSize(fileOffset,
-                        "ELF file offset is too large for this host");
-
-        if (hostOffset > bytes_.size() ||
-            requiredSize > bytes_.size() - hostOffset) {
-            throw std::runtime_error(
-                "ELF virtual address resolves outside the input file");
-        }
-
-        return hostOffset;
+        return CheckedFileOffset(
+            bytes_,
+            segment.fileOffset,
+            delta,
+            requiredSize,
+            "ELF virtual address resolves outside the input file");
     }
 
     throw std::runtime_error(
         "ELF virtual address is not backed by a load segment");
+}
+
+std::size_t ElfFileView::ResolveFileOffset(
+    const DynamicTableReference& reference,
+    std::size_t requiredSize) const {
+    if (reference.kind == DynamicReferenceKind::VirtualAddress) {
+        return ResolveFileOffset(reference.value, requiredSize);
+    }
+
+    if (!image_.sceDynamicDataSegment.has_value()) {
+        throw std::runtime_error(
+            "SCE dynamic table reference requires PT_SCE_DYNLIBDATA");
+    }
+
+    const auto& segment = *image_.sceDynamicDataSegment;
+    if (reference.value > segment.fileSize) {
+        throw std::runtime_error(
+            "SCE dynamic table exceeds PT_SCE_DYNLIBDATA");
+    }
+
+    const auto available =
+        CheckedSize(
+            segment.fileSize - reference.value,
+            "SCE dynamic data range is too large for this host");
+
+    if (requiredSize > available) {
+        throw std::runtime_error(
+            "SCE dynamic table exceeds PT_SCE_DYNLIBDATA");
+    }
+
+    return CheckedFileOffset(
+        bytes_,
+        segment.fileOffset,
+        reference.value,
+        requiredSize,
+        "SCE dynamic table resolves outside the input file");
 }
 
 std::span<const std::byte> ElfFileView::ResolveRange(
@@ -72,8 +118,15 @@ std::span<const std::byte> ElfFileView::ResolveRange(
     return bytes_.subspan(offset, size);
 }
 
+std::span<const std::byte> ElfFileView::ResolveRange(
+    const DynamicTableReference& reference,
+    std::size_t size) const {
+    const auto offset = ResolveFileOffset(reference, size);
+    return bytes_.subspan(offset, size);
+}
+
 std::string ElfFileView::ReadString(
-    std::uint64_t tableAddress,
+    const DynamicTableReference& tableReference,
     std::uint64_t tableSize,
     std::uint64_t stringOffset) const {
     const auto hostTableSize =
@@ -86,7 +139,7 @@ std::string ElfFileView::ReadString(
             "ELF string-table offset is outside the string table");
     }
 
-    const auto table = ResolveRange(tableAddress, hostTableSize);
+    const auto table = ResolveRange(tableReference, hostTableSize);
 
     std::size_t end = hostStringOffset;
     while (end < table.size() && table[end] != std::byte{0}) {

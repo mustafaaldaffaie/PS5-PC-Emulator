@@ -18,6 +18,7 @@
 - [x] Map PT_LOAD segments
 - [x] Entry-point validation
 - [x] Dynamic metadata and DT_NEEDED parsing
+- [x] SCE dynamic data and DT_SCE table layout
 - [x] Relocation model
 - [x] Dynamic symbol parsing
 - [x] Import table parsing
@@ -27,7 +28,7 @@
 ## Phase 3 - HLE
 
 - [ ] NID resolver
-- [ ] Kernel service registry
+- [x] HLE service registry foundation
 - [ ] Threading primitives
 - [ ] Time and synchronization
 - [ ] Filesystem

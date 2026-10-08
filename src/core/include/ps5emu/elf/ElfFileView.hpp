@@ -5,6 +5,7 @@
 #include <span>
 #include <string>
 
+#include <ps5emu/elf/DynamicMetadata.hpp>
 #include <ps5emu/elf/Elf64.hpp>
 
 namespace ps5emu::elf {
@@ -17,12 +18,20 @@ public:
     ResolveFileOffset(std::uint64_t virtualAddress,
                       std::size_t requiredSize) const;
 
+    [[nodiscard]] std::size_t
+    ResolveFileOffset(const DynamicTableReference& reference,
+                      std::size_t requiredSize) const;
+
     [[nodiscard]] std::span<const std::byte>
     ResolveRange(std::uint64_t virtualAddress,
                  std::size_t size) const;
 
+    [[nodiscard]] std::span<const std::byte>
+    ResolveRange(const DynamicTableReference& reference,
+                 std::size_t size) const;
+
     [[nodiscard]] std::string
-    ReadString(std::uint64_t tableAddress,
+    ReadString(const DynamicTableReference& table,
                std::uint64_t tableSize,
                std::uint64_t stringOffset) const;
 
