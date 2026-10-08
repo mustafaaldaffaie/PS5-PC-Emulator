@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <span>
 
 #include <ps5emu/memory/GuestMemory.hpp>
@@ -11,6 +12,10 @@ class NativeMemoryRegion final {
 public:
     [[nodiscard]] static NativeMemoryRegion
     Allocate(std::size_t size);
+
+    [[nodiscard]] static NativeMemoryRegion
+    AllocateAt(std::uintptr_t address,
+               std::size_t size);
 
     NativeMemoryRegion(const NativeMemoryRegion&) = delete;
     NativeMemoryRegion& operator=(const NativeMemoryRegion&) = delete;
@@ -33,6 +38,11 @@ public:
     [[nodiscard]] bool Empty() const noexcept;
 
 private:
+    [[nodiscard]] static NativeMemoryRegion
+    AllocateImpl(std::uintptr_t requestedAddress,
+                 std::size_t size,
+                 bool fixed);
+
     NativeMemoryRegion(void* address,
                        std::size_t size,
                        std::size_t mappedSize,

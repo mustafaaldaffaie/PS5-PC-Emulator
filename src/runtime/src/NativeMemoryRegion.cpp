@@ -42,6 +42,23 @@ std::size_t PageSize() {
 #endif
 }
 
+std::size_t AllocationAlignment() {
+#if defined(_WIN32)
+    SYSTEM_INFO information{};
+    GetSystemInfo(&information);
+
+    if (information.dwAllocationGranularity == 0) {
+        throw std::runtime_error(
+            "Windows reported a zero allocation granularity");
+    }
+
+    return static_cast<std::size_t>(
+        information.dwAllocationGranularity);
+#elif defined(__linux__)
+    return PageSize();
+#endif
+}
+
 std::size_t RoundUp(std::size_t value,
                     std::size_t alignment) {
     const auto remainder = value % alignment;
@@ -158,19 +175,48 @@ void FlushCode(void* address,
 
 NativeMemoryRegion NativeMemoryRegion::Allocate(
     std::size_t size) {
+    return AllocateImpl(0, size, false);
+}
+
+NativeMemoryRegion NativeMemoryRegion::AllocateAt(
+    std::uintptr_t address,
+    std::size_t size) {
+    return AllocateImpl(address, size, true);
+}
+
+NativeMemoryRegion NativeMemoryRegion::AllocateImpl(
+    std::uintptr_t requestedAddress,
+    std::size_t size,
+    bool fixed) {
     if (size == 0) {
         throw std::invalid_argument(
             "Native memory region size cannot be zero");
+    }
+
+    if (fixed) {
+        if (requestedAddress == 0) {
+            throw std::invalid_argument(
+                "Fixed native memory address cannot be zero");
+        }
+
+        const auto alignment = AllocationAlignment();
+        if ((requestedAddress % alignment) != 0) {
+            throw std::invalid_argument(
+                "Fixed native memory address is not allocation aligned");
+        }
     }
 
     const auto mappedSize =
         RoundUp(size, PageSize());
 
     void* address = nullptr;
+    void* requested = fixed
+        ? reinterpret_cast<void*>(requestedAddress)
+        : nullptr;
 
 #if defined(_WIN32)
     address = VirtualAlloc(
-        nullptr,
+        requested,
         mappedSize,
         MEM_RESERVE | MEM_COMMIT,
         PAGE_READWRITE);
@@ -179,18 +225,39 @@ NativeMemoryRegion NativeMemoryRegion::Allocate(
         throw std::runtime_error(
             "VirtualAlloc failed for native memory region");
     }
+
+    if (fixed && address != requested) {
+        static_cast<void>(
+            VirtualFree(address, 0, MEM_RELEASE));
+        throw std::runtime_error(
+            "VirtualAlloc did not honor the fixed native address");
+    }
 #elif defined(__linux__)
+    int flags = MAP_PRIVATE | MAP_ANONYMOUS;
+#if defined(MAP_FIXED_NOREPLACE)
+    if (fixed) {
+        flags |= MAP_FIXED_NOREPLACE;
+    }
+#endif
+
     address = mmap(
-        nullptr,
+        requested,
         mappedSize,
         PROT_READ | PROT_WRITE,
-        MAP_PRIVATE | MAP_ANONYMOUS,
+        flags,
         -1,
         0);
 
     if (address == MAP_FAILED) {
         throw std::runtime_error(
             "mmap failed for native memory region");
+    }
+
+    if (fixed && address != requested) {
+        static_cast<void>(
+            munmap(address, mappedSize));
+        throw std::runtime_error(
+            "mmap did not honor the fixed native address");
     }
 #endif
 

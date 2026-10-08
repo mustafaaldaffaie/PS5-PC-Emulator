@@ -6,6 +6,7 @@ add_library(ps5emu_runtime STATIC
     src/HleTrapHandler.cpp
     src/ImportResolver.cpp
     src/NativeContextAdapter.cpp
+    src/NativeImageMaterializer.cpp
     src/NativeMemoryRegion.cpp
     src/SceExecutablePreparer.cpp
     src/SceImportResolver.cpp
@@ -84,4 +85,11 @@ if(PS5EMU_BUILD_TESTS)
     target_link_libraries(ps5emu_native_memory_region_tests
         PRIVATE ps5emu_runtime ps5emu_test_options)
     add_test(NAME native_memory_region COMMAND ps5emu_native_memory_region_tests)
+
+    add_executable(ps5emu_native_image_materializer_tests
+        tests/NativeImageMaterializerTests.cpp
+    )
+    target_link_libraries(ps5emu_native_image_materializer_tests
+        PRIVATE ps5emu_runtime ps5emu_test_options)
+    add_test(NAME native_image_materializer COMMAND ps5emu_native_image_materializer_tests)
 endif()
