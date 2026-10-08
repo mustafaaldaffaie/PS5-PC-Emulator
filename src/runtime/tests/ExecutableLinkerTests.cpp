@@ -3,7 +3,6 @@
 #include <cassert>
 #include <cstring>
 #include <limits>
-#include <iostream>
 #include <stdexcept>
 #include <vector>
 
@@ -165,39 +164,28 @@ int main() {
 
     memory::GuestMemory memory;
     const auto linked = runtime::ExecutableLinker::Load(bytes, memory, options);
-    const auto failCheck = [](int code, const char* message) {
-        std::cerr << "TLS linker check " << code << " failed: "
-                  << message << "\n";
-        return code;
-    };
+    assert(linked.loaded.entryPoint == 0x501010);
+    assert(linked.loaded.mappedSegmentCount == 1);
+    assert(linked.appliedRelocationCount == 10);
+    assert(linked.resolvedExternalSymbolCount == 1);
+    assert(linked.unresolvedWeakSymbolCount == 1);
+    assert(calls == 2);
+    assert(ReadU64(memory, 0x501600) == 0x501000);
+    assert(ReadU64(memory, 0x501608) == 0x700000);
+    assert(ReadU64(memory, 0x501610) == 0x501024);
+    assert(ReadU64(memory, 0x501618) == 0x43);
+    assert(ReadU64(memory, 0x501620) == 0);
+    assert(ReadU64(memory, 0x501628) == 0x700000);
+    assert(ReadU64(memory, 0x501630) == 7);
+    assert(ReadU64(memory, 0x501638) == 1);
+    assert(ReadU64(memory, 0x501640) == 12);
+    assert(ReadU64(memory, 0x501648) ==
+           std::numeric_limits<std::uint64_t>::max() - 0x17);
+    assert(!memory::HasProtection(
+        memory.Mappings()[0].protection,
+        memory::Protection::Write));
 
-    if (linked.loaded.entryPoint != 0x501010) return failCheck(31, "entry point");
-    if (linked.loaded.mappedSegmentCount != 1) return failCheck(32, "mapped segment count");
-    if (linked.appliedRelocationCount != 10) return failCheck(33, "relocation count");
-    if (linked.resolvedExternalSymbolCount != 1) return failCheck(34, "resolved external count");
-    if (linked.unresolvedWeakSymbolCount != 1) return failCheck(35, "weak symbol count");
-    if (calls != 2) return failCheck(36, "external resolver call count");
-    if (ReadU64(memory, 0x501600) != 0x501000) return failCheck(37, "RELATIVE value");
-    if (ReadU64(memory, 0x501608) != 0x700000) return failCheck(38, "JUMP_SLOT value");
-    if (ReadU64(memory, 0x501610) != 0x501024) return failCheck(39, "local R_X86_64_64 value");
-    if (ReadU64(memory, 0x501618) != 0x43) return failCheck(40, "absolute symbol value");
-    if (ReadU64(memory, 0x501620) != 0) return failCheck(41, "weak symbol value");
-    if (ReadU64(memory, 0x501628) != 0x700000) return failCheck(42, "cached external value");
-    if (ReadU64(memory, 0x501630) != 7) return failCheck(43, "symbol-zero value");
-    if (ReadU64(memory, 0x501638) != 1) return failCheck(44, "DTPMOD64 value");
-    if (ReadU64(memory, 0x501640) != 12) return failCheck(45, "DTPOFF64 value");
-    if (ReadU64(memory, 0x501648) !=
-        std::numeric_limits<std::uint64_t>::max() - 0x17) {
-        return failCheck(46, "TPOFF64 value");
-    }
-    if (memory::HasProtection(memory.Mappings()[0].protection,
-                              memory::Protection::Write)) {
-        return failCheck(47, "mapping protection");
-    }
-
-    std::cerr << "checkpoint: required import failure\n";
     ExpectFailure(bytes, {});
-    std::cerr << "checkpoint: mutation failures\n";
     auto changed = bytes;
     Relocation(changed, 9, 0x1648, 0, 999);
     ExpectFailure(changed, options);
