@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 namespace {
 
@@ -27,8 +28,11 @@ int main() {
     NativeSyscallDispatcher dispatcher(
         GuestProcessIdentity{
             .processId = 1234,
+            .parentProcessId = 4321,
             .userId = 2001,
             .effectiveUserId = 2002,
+            .groupId = 3001,
+            .effectiveGroupId = 3002,
         });
 
     for (const auto& test :
@@ -36,6 +40,9 @@ int main() {
              std::pair<std::uint64_t, std::uint64_t>{20, 1234},
              std::pair<std::uint64_t, std::uint64_t>{24, 2001},
              std::pair<std::uint64_t, std::uint64_t>{25, 2002},
+             std::pair<std::uint64_t, std::uint64_t>{39, 4321},
+             std::pair<std::uint64_t, std::uint64_t>{43, 3002},
+             std::pair<std::uint64_t, std::uint64_t>{47, 3001},
          }) {
         SysvGuestContext context;
         context.rax = test.first;
