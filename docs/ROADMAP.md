@@ -18,9 +18,9 @@
 - [x] Map PT_LOAD segments
 - [x] Entry-point validation
 - [x] Dynamic metadata and DT_NEEDED parsing
-- [ ] Relocation model
-- [ ] Dynamic symbol parsing
-- [ ] Import table parsing
+- [x] Relocation model
+- [x] Dynamic symbol parsing
+- [x] Import table parsing
 - [ ] Module metadata
 - [ ] SELF container research and clean-room parser
 

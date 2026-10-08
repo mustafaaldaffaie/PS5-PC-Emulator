@@ -6,6 +6,7 @@
 #include <ps5emu/Core.hpp>
 #include <ps5emu/elf/DynamicMetadata.hpp>
 #include <ps5emu/elf/Elf64.hpp>
+#include <ps5emu/elf/ImportTable.hpp>
 #include <ps5emu/loader/ExecutableImageLoader.hpp>
 #include <ps5emu/memory/GuestMemory.hpp>
 
@@ -41,6 +42,8 @@ int InspectExecutable(const char* path) {
     const auto elfImage = ps5emu::elf::Elf64::Parse(bytes);
     const auto dynamic =
         ps5emu::elf::DynamicMetadataParser::Parse(bytes, elfImage);
+    const auto imports =
+        ps5emu::elf::ImportTable::Parse(bytes, elfImage, dynamic);
 
     ps5emu::memory::GuestMemory memory;
     const auto loaded =
@@ -64,6 +67,14 @@ int InspectExecutable(const char* path) {
               << dynamic.neededLibraries.size() << '\n';
     for (const auto& library : dynamic.neededLibraries) {
         std::cout << "  " << library << '\n';
+    }
+
+    std::cout << "Imports: " << imports.size() << '\n';
+    for (const auto& import : imports) {
+        std::cout << "  [" << import.symbolIndex << "] "
+                  << import.name
+                  << " relocations="
+                  << import.relocations.size() << '\n';
     }
 
     return 0;
