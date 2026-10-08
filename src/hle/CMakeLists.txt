@@ -1,5 +1,6 @@
 add_library(ps5emu_hle STATIC
     src/HleRegistry.cpp
+    src/Nid.cpp
 )
 
 target_include_directories(ps5emu_hle
@@ -13,4 +14,10 @@ if(PS5EMU_BUILD_TESTS)
     )
     target_link_libraries(ps5emu_hle_registry_tests PRIVATE ps5emu_hle ps5emu_test_options)
     add_test(NAME hle_registry COMMAND ps5emu_hle_registry_tests)
+
+    add_executable(ps5emu_nid_tests
+        tests/NidTests.cpp
+    )
+    target_link_libraries(ps5emu_nid_tests PRIVATE ps5emu_hle ps5emu_test_options)
+    add_test(NAME nid_hash COMMAND ps5emu_nid_tests)
 endif()
