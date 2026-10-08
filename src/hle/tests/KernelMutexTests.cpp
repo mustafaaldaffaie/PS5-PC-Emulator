@@ -2,6 +2,8 @@
 #include <ps5emu/hle/Nid.hpp>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <array>
 #include <cassert>
 #include <cstddef>
@@ -119,7 +121,7 @@ int main() {
         registry,
         "libkernel");
 
-    assert(registry.Size() == 18);
+    assert(registry.Size() == 27);
 
     TestMemory memory(256);
     constexpr std::uint64_t attr = 32;
@@ -336,6 +338,129 @@ int main() {
             "pthread_mutex_init",
             0,
             0) == 14);
+
+
+    constexpr std::uint64_t condAttr = 160;
+    constexpr std::uint64_t cond = 176;
+
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "scePthreadCondattrInit",
+            condAttr) == ok);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "scePthreadCondattrSetclock",
+            condAttr,
+            4) == ok);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "scePthreadCondInit",
+            cond,
+            condAttr) == ok);
+
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "scePthreadMutexInit",
+            mutex,
+            0) == ok);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "scePthreadMutexLock",
+            mutex) == ok);
+
+    constexpr std::uint64_t timedOut =
+        0x8002003cull;
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "scePthreadCondTimedwait",
+            cond,
+            mutex,
+            0) == timedOut);
+
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "scePthreadMutexTrylock",
+            mutex) == busy);
+
+    std::atomic<bool> finished{false};
+    std::thread signaler([&] {
+        while (!finished.load(
+            std::memory_order_acquire)) {
+            static_cast<void>(
+                Invoke(
+                    registry,
+                    memory,
+                    "scePthreadCondSignal",
+                    cond));
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(1));
+        }
+    });
+
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "scePthreadCondWait",
+            cond,
+            mutex) == ok);
+
+    finished.store(
+        true,
+        std::memory_order_release);
+    signaler.join();
+
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "scePthreadCondBroadcast",
+            cond) == ok);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "scePthreadMutexUnlock",
+            mutex) == ok);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "scePthreadMutexDestroy",
+            mutex) == ok);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "scePthreadCondDestroy",
+            cond) == ok);
+    assert(memory.LoadU64(cond) == 2);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "scePthreadCondSignal",
+            cond) == invalid);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "scePthreadCondattrDestroy",
+            condAttr) == ok);
 
     assert(
         Invoke(
