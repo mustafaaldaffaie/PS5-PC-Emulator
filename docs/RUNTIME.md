@@ -20,8 +20,23 @@ Resolution produces two collections:
 - bindings for imports with a known identity and registered HLE service;
 - unresolved imports with an explicit failure reason.
 
-Native guest-call trampolines are still required before HLE handlers can be
-used as relocation targets.
+## Synthetic HLE thunk arena
+
+HleThunkTable assigns stable synthetic guest addresses to registered HLE
+services. Identity-equivalent services reuse one slot. The default arena uses
+16-byte slots and is configurable by base address, slot size, and capacity.
+
+The arena is mapped read/execute and initialized with x86 INT3 bytes. These
+bytes are diagnostic trap placeholders, not executable HLE implementations.
+A future guest execution engine must intercept thunk addresses, marshal the
+guest ABI into HleCallFrame, dispatch through HleRegistry, and write return
+state back to the guest.
+
+SceExecutablePreparer combines SCE identity resolution with ExecutableLinker.
+Resolved imports receive thunk addresses that can be written by normal ELF
+relocations. Guest memory and thunk-table state are staged and committed
+together. Missing required imports, relocation failures, or thunk-arena
+collisions leave both caller-owned objects unchanged.
 
 ## Single-image linking
 
@@ -44,9 +59,8 @@ transaction that avoids copying existing allocations. Successful loading
 invalidates previous spans and mapping references. Resolver callbacks must
 not mutate the caller's memory or recursively load into it.
 
-ps5emu prepare <elf-file> [load-bias] exercises the path without executing
-guest code. The bias accepts decimal or 0x hexadecimal. The CLI has no native
-HLE trampolines yet, so required external imports fail explicitly. inspect
+ps5emu prepare <elf-file> [load-bias] exercises the generic path without
+executing guest code. The bias accepts decimal or 0x hexadecimal. inspect
 continues to display metadata without linking. Neither command runs games.
 
 Symbol rules follow the generic ELF ABI:

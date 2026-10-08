@@ -1,6 +1,8 @@
 add_library(ps5emu_runtime STATIC
     src/ExecutableLinker.cpp
+    src/HleThunkTable.cpp
     src/ImportResolver.cpp
+    src/SceExecutablePreparer.cpp
     src/SceImportResolver.cpp
 )
 
@@ -35,4 +37,11 @@ if(PS5EMU_BUILD_TESTS)
     target_link_libraries(ps5emu_sce_import_resolver_tests
         PRIVATE ps5emu_runtime ps5emu_test_options)
     add_test(NAME sce_import_resolver COMMAND ps5emu_sce_import_resolver_tests)
+
+    add_executable(ps5emu_sce_executable_preparer_tests
+        tests/SceExecutablePreparerTests.cpp
+    )
+    target_link_libraries(ps5emu_sce_executable_preparer_tests
+        PRIVATE ps5emu_runtime ps5emu_test_options)
+    add_test(NAME sce_executable_preparer COMMAND ps5emu_sce_executable_preparer_tests)
 endif()
