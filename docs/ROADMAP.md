@@ -53,7 +53,7 @@
 - [x] Native Windows/Linux exception hookup
 - [x] Native guest/HLE execution and resume loop
 - [ ] Host-call trampolines beyond trap slots
-- [ ] Syscall interception strategy
+- [x] Syscall interception strategy
 - [ ] AMD-only instruction handling
 - [ ] Intel compatibility lowering
 

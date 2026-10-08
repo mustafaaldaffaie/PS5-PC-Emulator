@@ -78,9 +78,24 @@ NativeHleExecutionResult NativeHleExecutor::Run(
 
         if (syscall != syscallAddresses.end()) {
             context.rip = capturedBreakpoint;
+
+            const auto syscallResult =
+                syscallDispatcher_.Dispatch(
+                    context,
+                    capturedBreakpoint);
+
+            result.syscallNumber =
+                syscallResult.syscallNumber;
+            result.syscallAddress =
+                capturedBreakpoint;
+
+            if (syscallResult.handled) {
+                ++result.handledSyscallCount;
+                resume = true;
+                continue;
+            }
+
             result.interceptedSyscall = true;
-            result.syscallNumber = context.rax;
-            result.syscallAddress = capturedBreakpoint;
             return result;
         }
 
