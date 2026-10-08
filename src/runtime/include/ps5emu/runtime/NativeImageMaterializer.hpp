@@ -51,6 +51,12 @@ public:
         memory::Protection protection,
         std::span<const std::byte> initialData = {});
 
+    // Adds every mapping from a staging GuestMemory as one transaction.
+    // No mapping metadata or native reservation is committed unless the
+    // entire batch can be allocated, initialized, and protected.
+    void AddMappings(
+        const memory::GuestMemory& memory);
+
 private:
     friend class NativeImageMaterializer;
 

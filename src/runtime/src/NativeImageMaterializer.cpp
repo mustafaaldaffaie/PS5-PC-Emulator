@@ -79,6 +79,28 @@ AddressRange PageRange(
     };
 }
 
+AddressRange PageRange(
+    const NativeImageMapping& mapping,
+    std::size_t pageSize) {
+    const auto end =
+        CheckedEnd(
+            mapping.guestAddress,
+            mapping.size,
+            "Native image mapping end address overflows");
+
+    return AddressRange{
+        .start =
+            AlignDown(
+                mapping.guestAddress,
+                pageSize),
+        .end =
+            AlignUp(
+                end,
+                pageSize,
+                "Native image mapping page range overflows"),
+    };
+}
+
 bool RangesOverlap(
     const AddressRange& left,
     const AddressRange& right) noexcept {
@@ -263,15 +285,19 @@ void NativeImage::AddMapping(
         std::move(region));
 }
 
-NativeImage NativeImageMaterializer::Materialize(
+void NativeImage::AddMappings(
     const memory::GuestMemory& memory) {
+    const auto& guestMappings =
+        memory.Mappings();
+
+    if (guestMappings.empty()) {
+        return;
+    }
+
     const auto pageSize =
         NativeMemoryRegion::SystemPageSize();
     const auto allocationGranularity =
         NativeMemoryRegion::AllocationGranularity();
-
-    const auto& guestMappings =
-        memory.Mappings();
 
     std::vector<AddressRange> pageRanges;
     pageRanges.reserve(guestMappings.size());
@@ -285,6 +311,45 @@ NativeImage NativeImageMaterializer::Materialize(
 
         pageRanges.push_back(
             PageRange(mapping, pageSize));
+
+        const AddressRange newRange{
+            .start = mapping.guestAddress,
+            .end = CheckedEnd(
+                mapping.guestAddress,
+                mapping.size,
+                "Guest mapping address range overflows"),
+        };
+
+        for (const auto& existing : mappings_) {
+            const AddressRange existingRange{
+                .start = existing.guestAddress,
+                .end = CheckedEnd(
+                    existing.guestAddress,
+                    existing.size,
+                    "Existing native mapping address range overflows"),
+            };
+
+            if (RangesOverlap(
+                    newRange,
+                    existingRange)) {
+                throw std::runtime_error(
+                    "Guest mapping overlaps an existing native mapping");
+            }
+
+            const auto existingPages =
+                PageRange(
+                    existing,
+                    pageSize);
+
+            if (RangesOverlap(
+                    pageRanges.back(),
+                    existingPages) &&
+                mapping.protection !=
+                    existing.protection) {
+                throw std::runtime_error(
+                    "Guest mapping conflicts with an existing native page protection");
+            }
+        }
     }
 
     for (std::size_t left = 0;
@@ -293,14 +358,33 @@ NativeImage NativeImageMaterializer::Materialize(
         for (std::size_t right = left + 1;
              right < guestMappings.size();
              ++right) {
-            if (!RangesOverlap(
-                    pageRanges[left],
-                    pageRanges[right])) {
-                continue;
+            const AddressRange leftRange{
+                .start = guestMappings[left].guestAddress,
+                .end = CheckedEnd(
+                    guestMappings[left].guestAddress,
+                    guestMappings[left].size,
+                    "Guest mapping address range overflows"),
+            };
+            const AddressRange rightRange{
+                .start = guestMappings[right].guestAddress,
+                .end = CheckedEnd(
+                    guestMappings[right].guestAddress,
+                    guestMappings[right].size,
+                    "Guest mapping address range overflows"),
+            };
+
+            if (RangesOverlap(
+                    leftRange,
+                    rightRange)) {
+                throw std::runtime_error(
+                    "Guest mapping batch contains overlapping mappings");
             }
 
-            if (guestMappings[left].protection !=
-                guestMappings[right].protection) {
+            if (RangesOverlap(
+                    pageRanges[left],
+                    pageRanges[right]) &&
+                guestMappings[left].protection !=
+                    guestMappings[right].protection) {
                 throw std::runtime_error(
                     "Guest mappings require conflicting native page protections");
             }
@@ -317,19 +401,18 @@ NativeImage NativeImageMaterializer::Materialize(
                 mapping.size,
                 "Guest mapping reservation end overflows");
 
-        AddressRange range{
-            .start =
-                AlignDown(
-                    mapping.guestAddress,
-                    allocationGranularity),
-            .end =
-                AlignUp(
-                    end,
-                    allocationGranularity,
-                    "Guest reservation range overflows"),
-        };
-
-        reservations.push_back(range);
+        reservations.push_back(
+            AddressRange{
+                .start =
+                    AlignDown(
+                        mapping.guestAddress,
+                        allocationGranularity),
+                .end =
+                    AlignUp(
+                        end,
+                        allocationGranularity,
+                        "Guest reservation range overflows"),
+            });
     }
 
     std::sort(
@@ -359,15 +442,44 @@ NativeImage NativeImageMaterializer::Materialize(
                 range.end);
     }
 
-    NativeImage image;
-    image.mappings_.reserve(
+    for (const auto& candidate : merged) {
+        for (const auto& existing : reservations_) {
+            const auto start =
+                static_cast<std::uint64_t>(
+                    reinterpret_cast<std::uintptr_t>(
+                        existing.Data()));
+            const auto end =
+                CheckedEnd(
+                    start,
+                    existing.MappedSize(),
+                    "Existing native reservation range overflows");
+
+            if (RangesOverlap(
+                    candidate,
+                    AddressRange{
+                        .start = start,
+                        .end = end,
+                    })) {
+                throw std::runtime_error(
+                    "Guest mapping batch overlaps an existing native reservation");
+            }
+        }
+    }
+
+    mappings_.reserve(
+        mappings_.size() +
         guestMappings.size());
-    image.reservations_.reserve(
+    reservations_.reserve(
+        reservations_.size() +
         merged.size());
+
+    std::vector<NativeMemoryRegion> newReservations;
+    newReservations.reserve(merged.size());
 
     for (const auto& reservation : merged) {
         const auto size64 =
-            reservation.end - reservation.start;
+            reservation.end -
+            reservation.start;
 
         if (size64 >
             std::numeric_limits<std::size_t>::max()) {
@@ -375,7 +487,7 @@ NativeImage NativeImageMaterializer::Materialize(
                 "Native reservation is too large for this host");
         }
 
-        image.reservations_.push_back(
+        newReservations.push_back(
             NativeMemoryRegion::AllocateAt(
                 static_cast<std::uintptr_t>(
                     reservation.start),
@@ -400,19 +512,12 @@ NativeImage NativeImageMaterializer::Materialize(
                 "Guest mapping offset is too large for this host");
         }
 
-        image.reservations_[reservationIndex].Write(
+        newReservations[reservationIndex].Write(
             static_cast<std::size_t>(offset64),
             mapping.data);
-
-        image.mappings_.push_back(
-            NativeImageMapping{
-                .guestAddress = mapping.guestAddress,
-                .size = mapping.size,
-                .protection = mapping.protection,
-            });
     }
 
-    for (auto& reservation : image.reservations_) {
+    for (auto& reservation : newReservations) {
         reservation.Protect(
             memory::Protection::None);
     }
@@ -423,17 +528,35 @@ NativeImage NativeImageMaterializer::Materialize(
                 merged,
                 mapping.guestAddress,
                 mapping.size);
-
         const auto offset64 =
             mapping.guestAddress -
             merged[reservationIndex].start;
 
-        image.reservations_[reservationIndex].ProtectRange(
+        newReservations[reservationIndex].ProtectRange(
             static_cast<std::size_t>(offset64),
             mapping.size,
             mapping.protection);
     }
 
+    for (const auto& mapping : guestMappings) {
+        mappings_.push_back(
+            NativeImageMapping{
+                .guestAddress = mapping.guestAddress,
+                .size = mapping.size,
+                .protection = mapping.protection,
+            });
+    }
+
+    for (auto& reservation : newReservations) {
+        reservations_.push_back(
+            std::move(reservation));
+    }
+}
+
+NativeImage NativeImageMaterializer::Materialize(
+    const memory::GuestMemory& memory) {
+    NativeImage image;
+    image.AddMappings(memory);
     return image;
 }
 

@@ -195,6 +195,85 @@ int main() {
     }
 
     {
+        const auto before =
+            native.Mappings().size();
+
+        GuestMemory batch;
+        constexpr std::uint64_t first =
+            reservationBase + 0x1400123ull;
+        constexpr std::uint64_t second =
+            reservationBase + 0x1600456ull;
+
+        batch.Map(
+            first,
+            0x100,
+            Protection::Read |
+                Protection::Write);
+        batch.Map(
+            second,
+            0x100,
+            Protection::Read);
+
+        const std::array<std::byte, 2> firstData{
+            std::byte{0x12},
+            std::byte{0x34},
+        };
+        const std::array<std::byte, 2> secondData{
+            std::byte{0x56},
+            std::byte{0x78},
+        };
+
+        batch.Initialize(first, firstData);
+        batch.Initialize(second, secondData);
+
+        native.AddMappings(batch);
+
+        assert(native.Mappings().size() == before + 2);
+        assert(native.Contains(first, 0x100));
+        assert(native.Contains(second, 0x100));
+
+        const auto* firstBytes =
+            static_cast<const std::byte*>(
+                native.HostAddress(first, 2));
+        const auto* secondBytes =
+            static_cast<const std::byte*>(
+                native.HostAddress(second, 2));
+
+        assert(firstBytes[0] == std::byte{0x12});
+        assert(firstBytes[1] == std::byte{0x34});
+        assert(secondBytes[0] == std::byte{0x56});
+        assert(secondBytes[1] == std::byte{0x78});
+    }
+
+    {
+        const auto before =
+            native.Mappings().size();
+
+        GuestMemory invalidBatch;
+        constexpr std::uint64_t candidate =
+            reservationBase + 0x1800000ull;
+
+        invalidBatch.Map(
+            candidate,
+            0x1000,
+            Protection::Read |
+                Protection::Write);
+        invalidBatch.Map(
+            reservationBase + 0x1a00000ull,
+            0x1000,
+            Protection::Read |
+                Protection::Write |
+                Protection::Execute);
+
+        assert(Throws<std::invalid_argument>([&] {
+            native.AddMappings(invalidBatch);
+        }));
+
+        assert(native.Mappings().size() == before);
+        assert(!native.Contains(candidate, 1));
+    }
+
+    {
         GuestMemory unaligned;
         constexpr std::uint64_t address =
             reservationBase + 0x50123ull;
