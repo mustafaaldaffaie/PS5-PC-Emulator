@@ -133,6 +133,68 @@ int main() {
     }));
 
     {
+        constexpr std::uint64_t dynamicAddress =
+            reservationBase + 0x1000000ull;
+
+        const std::array<std::byte, 4> initial{
+            std::byte{0xde},
+            std::byte{0xad},
+            std::byte{0xbe},
+            std::byte{0xef},
+        };
+
+        native.AddMapping(
+            dynamicAddress,
+            0x2000,
+            Protection::Read |
+                Protection::Write,
+            initial);
+
+        assert(native.Contains(dynamicAddress, 0x2000));
+        assert(native.Mappings().size() == 3);
+
+        auto* dynamicBytes =
+            static_cast<std::byte*>(
+                native.HostAddress(
+                    dynamicAddress,
+                    initial.size()));
+
+        assert(dynamicBytes[0] == std::byte{0xde});
+        assert(dynamicBytes[3] == std::byte{0xef});
+
+        dynamicBytes[1] = std::byte{0x7a};
+        assert(dynamicBytes[1] == std::byte{0x7a});
+
+        assert(Throws<std::runtime_error>([&] {
+            native.AddMapping(
+                dynamicAddress,
+                0x1000,
+                Protection::Read);
+        }));
+
+        assert(Throws<std::invalid_argument>([&] {
+            native.AddMapping(
+                dynamicAddress + 1,
+                0x1000,
+                Protection::Read);
+        }));
+
+        assert(Throws<std::invalid_argument>([&] {
+            native.AddMapping(
+                reservationBase + 0x1200000ull,
+                0x1000,
+                Protection::Read |
+                    Protection::Write |
+                    Protection::Execute);
+        }));
+
+        assert(
+            !native.Contains(
+                reservationBase + 0x1200000ull,
+                1));
+    }
+
+    {
         GuestMemory unaligned;
         constexpr std::uint64_t address =
             reservationBase + 0x50123ull;
