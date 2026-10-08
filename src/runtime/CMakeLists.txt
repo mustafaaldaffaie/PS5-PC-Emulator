@@ -1,5 +1,6 @@
 add_library(ps5emu_runtime STATIC
     src/ExecutableLinker.cpp
+    src/GuestCallDispatcher.cpp
     src/HleThunkTable.cpp
     src/ImportResolver.cpp
     src/SceExecutablePreparer.cpp
@@ -44,4 +45,11 @@ if(PS5EMU_BUILD_TESTS)
     target_link_libraries(ps5emu_sce_executable_preparer_tests
         PRIVATE ps5emu_runtime ps5emu_test_options)
     add_test(NAME sce_executable_preparer COMMAND ps5emu_sce_executable_preparer_tests)
+
+    add_executable(ps5emu_guest_call_dispatcher_tests
+        tests/GuestCallDispatcherTests.cpp
+    )
+    target_link_libraries(ps5emu_guest_call_dispatcher_tests
+        PRIVATE ps5emu_runtime ps5emu_test_options)
+    add_test(NAME guest_call_dispatcher COMMAND ps5emu_guest_call_dispatcher_tests)
 endif()
