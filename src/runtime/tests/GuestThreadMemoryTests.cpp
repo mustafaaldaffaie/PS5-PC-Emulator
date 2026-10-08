@@ -1,8 +1,11 @@
 #include <ps5emu/runtime/GuestThreadMemory.hpp>
 
+#include <ps5emu/runtime/GuestCallDispatcher.hpp>
+
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include <vector>
 
@@ -18,12 +21,22 @@ bool Throws(Function&& function) {
     }
 }
 
+std::uint64_t ReadU64(
+    const ps5emu::memory::GuestMemory& memory,
+    std::uint64_t address) {
+    const auto bytes = memory.Read(address, sizeof(std::uint64_t));
+    std::uint64_t value = 0;
+    std::memcpy(&value, bytes.data(), sizeof(value));
+    return value;
+}
+
 } // namespace
 
 int main() {
     using ps5emu::memory::GuestMemory;
     using ps5emu::runtime::GuestThreadMemory;
     using ps5emu::runtime::GuestThreadMemoryOptions;
+    using ps5emu::runtime::SysvGuestContext;
 
     std::vector<std::byte> bytes(0x200);
     bytes[0x100] = std::byte{0xaa};
@@ -33,7 +46,7 @@ int main() {
 
     ps5emu::elf::Image image;
     image.tlsSegment = ps5emu::elf::Segment{
-        .memorySize = 16,
+        .memorySize = 18,
         .fileSize = 4,
         .fileOffset = 0x100,
         .alignment = 16,
@@ -50,16 +63,20 @@ int main() {
                 .stackAddress = 0x700000,
                 .stackSize = 0x1000,
                 .tlsAddress = 0x710000,
+                .stackGuard = 0x1122334455667788ull,
             });
 
     assert(layout.stackAddress == 0x700000);
     assert(layout.stackSize == 0x1000);
     assert(layout.initialStackPointer == 0x701000);
     assert(layout.tlsAddress == 0x710000);
-    assert(layout.tlsSize == 16);
+    assert(layout.tlsSize == 18);
+    assert(layout.tlsBlockSize == 32);
     assert(layout.tlsAlignment == 16);
+    assert(layout.threadPointer == 0x710020);
+    assert(layout.threadControlBlockSize == 0x30);
 
-    const auto tls = memory.Read(0x710000, 16);
+    const auto tls = memory.Read(0x710000, 18);
     assert(tls[0] == std::byte{0xaa});
     assert(tls[1] == std::byte{0xbb});
     assert(tls[2] == std::byte{0xcc});
@@ -68,6 +85,19 @@ int main() {
     for (std::size_t index = 4; index < tls.size(); ++index) {
         assert(tls[index] == std::byte{0});
     }
+
+    assert(ReadU64(memory, 0x710020) == 0x710020);
+    assert(
+        ReadU64(memory, 0x710020 + 0x28) ==
+        0x1122334455667788ull);
+
+    SysvGuestContext context;
+    context.rsp = 0xdeadbeef;
+    context.fsBase = 0xfeedface;
+    GuestThreadMemory::ApplyToContext(layout, context);
+
+    assert(context.rsp == 0x701000);
+    assert(context.fsBase == 0x710020);
 
     {
         GuestMemory unchanged;
@@ -108,6 +138,25 @@ int main() {
     }
 
     {
+        GuestMemory unchanged;
+
+        assert(Throws([&] {
+            static_cast<void>(
+                GuestThreadMemory::Create(
+                    bytes,
+                    image,
+                    unchanged,
+                    GuestThreadMemoryOptions{
+                        .stackAddress = 0x750000,
+                        .stackSize = 0x1000,
+                        .tlsAddress = 0x760008,
+                    }));
+        }));
+
+        assert(unchanged.Mappings().empty());
+    }
+
+    {
         ps5emu::elf::Image noTls;
         GuestMemory noTlsMemory;
 
@@ -124,6 +173,16 @@ int main() {
         assert(noTlsLayout.initialStackPointer == 0x741010);
         assert(!noTlsLayout.tlsAddress.has_value());
         assert(noTlsLayout.tlsSize == 0);
+        assert(noTlsLayout.tlsBlockSize == 0);
+        assert(!noTlsLayout.threadPointer.has_value());
+
+        SysvGuestContext noTlsContext;
+        noTlsContext.fsBase = 1234;
+        GuestThreadMemory::ApplyToContext(
+            noTlsLayout,
+            noTlsContext);
+        assert(noTlsContext.rsp == 0x741010);
+        assert(noTlsContext.fsBase == 0);
     }
 
     return 0;

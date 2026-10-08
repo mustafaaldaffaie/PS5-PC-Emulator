@@ -18,6 +18,7 @@ struct SysvGuestContext {
     std::uint64_t rsp = 0;
     std::uint64_t rax = 0;
     std::uint64_t rip = 0;
+    std::uint64_t fsBase = 0;
 };
 
 struct GuestCallDispatchResult {

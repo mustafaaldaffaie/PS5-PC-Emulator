@@ -87,6 +87,7 @@ int main() {
         .r9 = 6,
         .rsp = rsp,
         .rax = 999,
+        .fsBase = 0x710020,
     };
 
     const auto result =
@@ -100,6 +101,7 @@ int main() {
     assert(result.handled);
     assert(result.errorCode == -42);
     assert(context.rax == 36);
+    assert(context.fsBase == 0x710020);
     assert(memory.Read(0x100080, 1)[0] == std::byte{0x5a});
 
     {
@@ -117,6 +119,7 @@ int main() {
         assert(!missing.handled);
         assert(missing.errorCode == 0);
         assert(unchanged.rax == 1234);
+        assert(unchanged.fsBase == 0x710020);
     }
 
     {

@@ -1,11 +1,21 @@
 #include <ps5emu/runtime/GuestThreadMemory.hpp>
 
+#include <ps5emu/runtime/GuestCallDispatcher.hpp>
+
+#include <array>
+#include <algorithm>
+#include <cstring>
 #include <limits>
 #include <stdexcept>
 #include <utility>
 
 namespace ps5emu::runtime {
 namespace {
+
+constexpr std::size_t kThreadControlBlockSize = 0x30;
+constexpr std::size_t kSelfPointerOffset = 0x00;
+constexpr std::size_t kStackGuardOffset = 0x28;
+constexpr std::uint64_t kMinimumTlsAlignment = 16;
 
 std::uint64_t CheckedEnd(std::uint64_t start,
                          std::size_t size,
@@ -25,6 +35,31 @@ std::size_t CheckedSize(std::uint64_t size,
     }
 
     return static_cast<std::size_t>(size);
+}
+
+std::size_t AlignUp(std::size_t value,
+                    std::uint64_t alignment) {
+    if (alignment <= 1) {
+        return value;
+    }
+
+    const auto hostAlignment =
+        CheckedSize(alignment, "Guest TLS alignment is too large for this host");
+    const auto mask = hostAlignment - 1;
+
+    if (value > std::numeric_limits<std::size_t>::max() - mask) {
+        throw std::runtime_error("Guest TLS block size overflows");
+    }
+
+    return (value + mask) & ~mask;
+}
+
+void InitializeU64(memory::GuestMemory& memory,
+                   std::uint64_t address,
+                   std::uint64_t value) {
+    std::array<std::byte, sizeof(value)> bytes{};
+    std::memcpy(bytes.data(), &value, sizeof(value));
+    memory.Initialize(address, bytes);
 }
 
 } // namespace
@@ -87,10 +122,14 @@ GuestThreadMemoryLayout GuestThreadMemory::Create(
                 tls.fileOffset,
                 "Guest TLS file offset is too large for this host");
 
-        if (tls.alignment > 1 &&
-            (*options.tlsAddress % tls.alignment) != 0) {
+        const auto tlsAlignment =
+            std::max<std::uint64_t>(
+                tls.alignment,
+                kMinimumTlsAlignment);
+
+        if ((*options.tlsAddress % tlsAlignment) != 0) {
             throw std::invalid_argument(
-                "Guest TLS address does not satisfy PT_TLS alignment");
+                "Guest TLS address does not satisfy runtime TLS alignment");
         }
 
         if (tlsFileOffset > executableBytes.size() ||
@@ -100,9 +139,33 @@ GuestThreadMemoryLayout GuestThreadMemory::Create(
                 "Guest TLS template extends past end of executable");
         }
 
+        const auto tlsBlockSize =
+            AlignUp(tlsSize, tlsAlignment);
+
+        if (tlsBlockSize >
+            std::numeric_limits<std::size_t>::max() -
+                kThreadControlBlockSize) {
+            throw std::runtime_error(
+                "Guest TLS runtime allocation size overflows");
+        }
+
+        const auto tlsRuntimeSize =
+            tlsBlockSize + kThreadControlBlockSize;
+
+        const auto threadPointer =
+            CheckedEnd(
+                *options.tlsAddress,
+                tlsBlockSize,
+                "Guest TLS thread pointer overflows");
+
+        CheckedEnd(
+            threadPointer,
+            kThreadControlBlockSize,
+            "Guest TLS thread-control block overflows");
+
         stagedMemory.Map(
             *options.tlsAddress,
-            tlsSize,
+            tlsRuntimeSize,
             memory::Protection::Read |
                 memory::Protection::Write);
 
@@ -114,13 +177,33 @@ GuestThreadMemoryLayout GuestThreadMemory::Create(
                     tlsFileSize));
         }
 
+        InitializeU64(
+            stagedMemory,
+            threadPointer + kSelfPointerOffset,
+            threadPointer);
+        InitializeU64(
+            stagedMemory,
+            threadPointer + kStackGuardOffset,
+            options.stackGuard);
+
         layout.tlsAddress = options.tlsAddress;
         layout.tlsSize = tlsSize;
-        layout.tlsAlignment = tls.alignment;
+        layout.tlsBlockSize = tlsBlockSize;
+        layout.tlsAlignment = tlsAlignment;
+        layout.threadPointer = threadPointer;
+        layout.threadControlBlockSize =
+            kThreadControlBlockSize;
     }
 
     memory = std::move(stagedMemory);
     return layout;
+}
+
+void GuestThreadMemory::ApplyToContext(
+    const GuestThreadMemoryLayout& layout,
+    SysvGuestContext& context) {
+    context.rsp = layout.initialStackPointer;
+    context.fsBase = layout.threadPointer.value_or(0);
 }
 
 } // namespace ps5emu::runtime

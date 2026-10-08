@@ -46,7 +46,7 @@
 
 - [x] Guest stack mapping
 - [x] PT_TLS parsing and per-thread TLS block initialization
-- [ ] TLS runtime ABI and FS-base integration
+- [x] TLS runtime ABI and FS-base integration
 - [x] HLE INT3 trap/return control-flow baseline
 - [ ] Native Windows/Linux exception hookup
 - [ ] Host-call trampolines beyond trap slots
