@@ -9,6 +9,9 @@ namespace {
 constexpr std::uint64_t kSysGetpid = 20;
 constexpr std::uint64_t kSysGetuid = 24;
 constexpr std::uint64_t kSysGeteuid = 25;
+constexpr std::uint64_t kSysGetppid = 39;
+constexpr std::uint64_t kSysGetegid = 43;
+constexpr std::uint64_t kSysGetgid = 47;
 constexpr std::uint64_t kCarryFlag = 1;
 
 std::uint64_t CheckedNextRip(
@@ -75,6 +78,36 @@ NativeSyscallDispatcher::Dispatch(
             context,
             syscallAddress,
             identity_.effectiveUserId);
+        return {
+            .handled = true,
+            .syscallNumber = number,
+        };
+
+    case kSysGetppid:
+        CompleteSuccess(
+            context,
+            syscallAddress,
+            identity_.parentProcessId);
+        return {
+            .handled = true,
+            .syscallNumber = number,
+        };
+
+    case kSysGetegid:
+        CompleteSuccess(
+            context,
+            syscallAddress,
+            identity_.effectiveGroupId);
+        return {
+            .handled = true,
+            .syscallNumber = number,
+        };
+
+    case kSysGetgid:
+        CompleteSuccess(
+            context,
+            syscallAddress,
+            identity_.groupId);
         return {
             .handled = true,
             .syscallNumber = number,
