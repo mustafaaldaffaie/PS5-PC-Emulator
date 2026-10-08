@@ -4,6 +4,7 @@
 #include <cstring>
 #include <limits>
 #include <stdexcept>
+#include <vector>
 
 namespace ps5emu::loader {
 namespace {
@@ -47,6 +48,9 @@ std::uint64_t AddSigned(std::uint64_t base,
 std::uint64_t ResolveSymbol(
     std::uint32_t symbolIndex,
     const RelocationContext& context) {
+    if (symbolIndex == 0) {
+        return 0;
+    }
     if (!context.resolveSymbol) {
         throw std::runtime_error(
             "Relocation requires a symbol resolver");
@@ -75,7 +79,17 @@ void RelocationApplier::Apply(
     std::span<const elf::Relocation> relocations,
     memory::GuestMemory& memory,
     const RelocationContext& context) {
+    struct PendingWrite {
+        std::uint64_t address;
+        std::uint64_t value;
+    };
+    std::vector<PendingWrite> writes;
+    writes.reserve(relocations.size());
+
     for (const auto& relocation : relocations) {
+        if (relocation.type == kRelocationNone) {
+            continue;
+        }
         const auto targetAddress =
             AddUnsigned(
                 context.loadBias,
@@ -85,9 +99,6 @@ void RelocationApplier::Apply(
         std::uint64_t value = 0;
 
         switch (relocation.type) {
-        case kRelocationNone:
-            continue;
-
         case kRelocation64: {
             const auto symbolAddress =
                 ResolveSymbol(relocation.symbolIndex, context);
@@ -117,7 +128,15 @@ void RelocationApplier::Apply(
                 "Unsupported x86-64 relocation type");
         }
 
-        WriteU64(memory, targetAddress, value);
+        if (!memory.IsMapped(targetAddress, sizeof(value))) {
+            throw std::runtime_error("Relocation target is outside mapped memory");
+        }
+        writes.push_back({targetAddress, value});
+    }
+
+    // Resolving and validating the entire batch prevents partial patches.
+    for (const auto& write : writes) {
+        WriteU64(memory, write.address, write.value);
     }
 }
 

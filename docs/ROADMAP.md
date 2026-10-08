@@ -17,11 +17,13 @@
 
 - [x] Map PT_LOAD segments
 - [x] Entry-point validation
+- [x] Transactional loading with explicit load bias
 - [x] Dynamic metadata and DT_NEEDED parsing
 - [x] SCE dynamic data and DT_SCE table layout
 - [x] Relocation model
 - [x] Dynamic symbol parsing
 - [x] Import table parsing
+- [x] Single-image linking with local and injected external addresses
 - [ ] Module metadata
 - [ ] SELF container research and clean-room parser
 

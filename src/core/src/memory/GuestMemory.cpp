@@ -128,6 +128,14 @@ const std::vector<Mapping>& GuestMemory::Mappings() const noexcept {
     return mappings_;
 }
 
+bool GuestMemory::IsMapped(std::uint64_t guestAddress,
+                           std::size_t size) const noexcept {
+    return std::any_of(mappings_.begin(), mappings_.end(),
+        [&](const Mapping& mapping) {
+            return Contains(mapping, guestAddress, size);
+        });
+}
+
 Mapping& GuestMemory::FindMapping(std::uint64_t guestAddress,
                                   std::size_t size) {
     for (auto& mapping : mappings_) {

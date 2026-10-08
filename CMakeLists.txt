@@ -10,6 +10,13 @@ option(PS5EMU_BUILD_TESTS "Build project tests" ON)
 
 if(PS5EMU_BUILD_TESTS)
     enable_testing()
+    # Test assertions must remain active in Release and multi-config builds.
+    add_library(ps5emu_test_options INTERFACE)
+    if(MSVC)
+        target_compile_options(ps5emu_test_options INTERFACE /UNDEBUG)
+    else()
+        target_compile_options(ps5emu_test_options INTERFACE -UNDEBUG)
+    endif()
 endif()
 
 add_subdirectory(src/core)

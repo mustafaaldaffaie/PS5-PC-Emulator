@@ -50,6 +50,9 @@ public:
     [[nodiscard]] std::span<const std::byte>
     Read(std::uint64_t guestAddress, std::size_t size) const;
 
+    [[nodiscard]] bool
+    IsMapped(std::uint64_t guestAddress, std::size_t size) const noexcept;
+
     [[nodiscard]] const std::vector<Mapping>& Mappings() const noexcept;
 
 private:

@@ -5,6 +5,7 @@
 #include <fstream>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace ps5emu::loader {
@@ -38,6 +39,13 @@ std::size_t CheckedSize(std::uint64_t value, const char* description) {
     }
 
     return static_cast<std::size_t>(value);
+}
+
+std::uint64_t AddBias(std::uint64_t address, std::uint64_t loadBias) {
+    if (address > std::numeric_limits<std::uint64_t>::max() - loadBias) {
+        throw std::runtime_error("ELF load address overflows");
+    }
+    return address + loadBias;
 }
 
 bool EntryPointIsExecutable(const elf::Image& image) {
@@ -86,7 +94,8 @@ std::vector<std::byte> ReadFile(const std::filesystem::path& path) {
 
 LoadedImage ExecutableImageLoader::LoadElf(
     std::span<const std::byte> bytes,
-    memory::GuestMemory& memory) {
+    memory::GuestMemory& memory,
+    std::uint64_t loadBias) {
     const auto image = elf::Elf64::Parse(bytes);
 
     if (!EntryPointIsExecutable(image)) {
@@ -94,6 +103,9 @@ LoadedImage ExecutableImageLoader::LoadElf(
             "ELF entry point is not inside an executable load segment");
     }
 
+    const auto entryPoint = AddBias(image.entryPoint, loadBias);
+    // Publish only after every segment has been mapped and initialized.
+    auto staged = memory;
     std::size_t mappedSegmentCount = 0;
 
     for (const auto& segment : image.loadSegments) {
@@ -111,30 +123,33 @@ LoadedImage ExecutableImageLoader::LoadElf(
             CheckedSize(segment.fileOffset,
                         "ELF load segment offset is too large for this host");
 
-        memory.Map(segment.virtualAddress,
+        const auto address = AddBias(segment.virtualAddress, loadBias);
+        staged.Map(address,
                    memorySize,
                    ConvertProtection(segment.flags));
 
         if (fileSize != 0) {
-            memory.Initialize(
-                segment.virtualAddress,
+            staged.Initialize(
+                address,
                 bytes.subspan(fileOffset, fileSize));
         }
 
         ++mappedSegmentCount;
     }
 
+    memory = std::move(staged);
     return LoadedImage{
-        .entryPoint = image.entryPoint,
+        .entryPoint = entryPoint,
         .mappedSegmentCount = mappedSegmentCount,
     };
 }
 
 LoadedImage ExecutableImageLoader::LoadElfFile(
     const std::filesystem::path& path,
-    memory::GuestMemory& memory) {
+    memory::GuestMemory& memory,
+    std::uint64_t loadBias) {
     const auto bytes = ReadFile(path);
-    return LoadElf(bytes, memory);
+    return LoadElf(bytes, memory, loadBias);
 }
 
 } // namespace ps5emu::loader
