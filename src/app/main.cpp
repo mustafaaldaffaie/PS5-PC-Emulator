@@ -12,6 +12,8 @@
 #include <ps5emu/loader/ExecutableImageLoader.hpp>
 #include <ps5emu/hle/BuiltinServices.hpp>
 #include <ps5emu/memory/GuestMemory.hpp>
+#include <ps5emu/runtime/NativeExecutionBuilder.hpp>
+#include <ps5emu/runtime/NativeHleExecutor.hpp>
 #include <ps5emu/runtime/SceExecutablePreparer.hpp>
 
 namespace {
@@ -20,7 +22,8 @@ std::vector<std::byte> ReadFile(const char* path);
 
 void PrintUsage(std::ostream& stream) {
     stream << "Usage: ps5emu inspect <elf-file>\n"
-           << "       ps5emu prepare <elf-file> [load-bias]\n";
+           << "       ps5emu prepare <elf-file> [load-bias]\n"
+           << "       ps5emu run-native <elf-file> [load-bias]\n";
 }
 
 std::uint64_t ParseLoadBias(std::string_view text) {
@@ -78,7 +81,67 @@ int PrepareExecutable(const char* path, std::uint64_t loadBias) {
     std::cout << "Unresolved weak symbols: "
               << prepared.linked.unresolvedWeakSymbolCount
               << '\n';
-    std::cout << "Guest execution is not implemented.\n";
+    std::cout
+        << "Preparation only; use run-native for experimental execution.\n";
+    return 0;
+}
+
+ps5emu::runtime::GuestExecutionOptions
+NativeExecutionOptions(std::uint64_t loadBias) {
+    ps5emu::runtime::GuestExecutionOptions options;
+    options.loadBias = loadBias;
+
+    options.threadMemory.stackAddress =
+        0x0000200100000000ull;
+    options.threadMemory.stackSize =
+        8u * 1024u * 1024u;
+    options.threadMemory.tlsAddress =
+        0x0000200200000000ull;
+
+    options.thunks.baseAddress =
+        0x0000200300000000ull;
+
+    return options;
+}
+
+int RunNativeExecutable(
+    const char* path,
+    std::uint64_t loadBias) {
+    const auto bytes = ReadFile(path);
+
+    auto prepared =
+        ps5emu::runtime::NativeExecutionBuilder::Prepare(
+            bytes,
+            NativeExecutionOptions(loadBias));
+
+    if (prepared.guest.image.unresolvedImportCount != 0) {
+        throw std::runtime_error(
+            "Native execution requires all non-weak imports to resolve");
+    }
+
+    ps5emu::runtime::NativeHleExecutor executor;
+    const auto result =
+        executor.Run(
+            prepared.guest.context,
+            prepared.nativeImage,
+            prepared.guest.registry,
+            prepared.guest.thunks);
+
+    std::cout << "Native guest returned.\n";
+    std::cout << "Handled HLE traps: "
+              << result.handledTrapCount
+              << '\n';
+    std::cout << "Guest RAX: 0x"
+              << std::hex
+              << prepared.guest.context.rax
+              << std::dec
+              << '\n';
+    std::cout << "Guest RSP: 0x"
+              << std::hex
+              << prepared.guest.context.rsp
+              << std::dec
+              << '\n';
+
     return 0;
 }
 
@@ -207,7 +270,16 @@ int main(int argc, char* argv[]) {
 
         if ((argc == 3 || argc == 4) &&
             std::string_view(argv[1]) == "prepare") {
-            return PrepareExecutable(argv[2], argc == 4 ? ParseLoadBias(argv[3]) : 0);
+            return PrepareExecutable(
+                argv[2],
+                argc == 4 ? ParseLoadBias(argv[3]) : 0);
+        }
+
+        if ((argc == 3 || argc == 4) &&
+            std::string_view(argv[1]) == "run-native") {
+            return RunNativeExecutable(
+                argv[2],
+                argc == 4 ? ParseLoadBias(argv[3]) : 0);
         }
 
         std::cerr << "Invalid command line.\n";

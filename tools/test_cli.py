@@ -39,7 +39,11 @@ def main() -> int:
         run(["prepare", str(sample), "5242880"], 0,
             "Prepared entry point: 0x501000")
         run(["prepare", str(sample), "0X500000"], 0,
-            "Guest execution is not implemented.")
+            "Preparation only; use run-native for experimental execution.")
+        run(["run-native", str(sample), "0x200000000000"], 0,
+            "Native guest returned.")
+        run(["run-native", str(sample), "0x200000000000"], 0,
+            "Handled HLE traps: 0")
         for bias in ["0x", "-1", "garbage", "18446744073709551616"]:
             run(["prepare", str(sample), bias], 2, "Invalid load bias")
         run(["prepare", str(sample), "0xffffffffffffffff"], 2,
