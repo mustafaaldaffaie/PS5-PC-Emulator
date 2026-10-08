@@ -10,8 +10,9 @@
 #include <ps5emu/elf/ImportTable.hpp>
 #include <ps5emu/elf/SceModuleMetadata.hpp>
 #include <ps5emu/loader/ExecutableImageLoader.hpp>
+#include <ps5emu/hle/BuiltinServices.hpp>
 #include <ps5emu/memory/GuestMemory.hpp>
-#include <ps5emu/runtime/ExecutableLinker.hpp>
+#include <ps5emu/runtime/SceExecutablePreparer.hpp>
 
 namespace {
 
@@ -39,17 +40,44 @@ std::uint64_t ParseLoadBias(std::string_view text) {
 
 int PrepareExecutable(const char* path, std::uint64_t loadBias) {
     const auto bytes = ReadFile(path);
+
+    auto registry =
+        ps5emu::hle::BuiltinServices::CreateRegistry();
+
     ps5emu::memory::GuestMemory memory;
-    ps5emu::runtime::LinkOptions options;
-    options.loadBias = loadBias;
-    const auto linked = ps5emu::runtime::ExecutableLinker::Load(
-        bytes, memory, options);
+    ps5emu::runtime::HleThunkTable thunks;
+
+    const auto prepared =
+        ps5emu::runtime::SceExecutablePreparer::Prepare(
+            bytes,
+            memory,
+            registry,
+            thunks,
+            ps5emu::runtime::ScePrepareOptions{
+                .loadBias = loadBias,
+            });
+
     std::cout << "Prepared entry point: 0x" << std::hex
-              << linked.loaded.entryPoint << std::dec << '\n';
-    std::cout << "Mapped segments: " << linked.loaded.mappedSegmentCount << '\n';
-    std::cout << "Applied relocations: " << linked.appliedRelocationCount << '\n';
+              << prepared.linked.loaded.entryPoint
+              << std::dec << '\n';
+    std::cout << "Mapped segments: "
+              << prepared.linked.loaded.mappedSegmentCount
+              << '\n';
+    std::cout << "Applied relocations: "
+              << prepared.linked.appliedRelocationCount
+              << '\n';
+    std::cout << "Resolved HLE imports: "
+              << prepared.resolvedHleImportCount
+              << '\n';
+    std::cout << "Unresolved imports: "
+              << prepared.unresolvedImportCount
+              << '\n';
+    std::cout << "HLE thunks: "
+              << thunks.Size()
+              << '\n';
     std::cout << "Unresolved weak symbols: "
-              << linked.unresolvedWeakSymbolCount << '\n';
+              << prepared.linked.unresolvedWeakSymbolCount
+              << '\n';
     std::cout << "Guest execution is not implemented.\n";
     return 0;
 }
