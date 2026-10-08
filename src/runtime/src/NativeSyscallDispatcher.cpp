@@ -8,6 +8,7 @@
 #include <ctime>
 #include <limits>
 #include <stdexcept>
+#include <thread>
 
 namespace ps5emu::runtime {
 namespace {
@@ -20,6 +21,8 @@ constexpr std::uint64_t kSysGetegid = 43;
 constexpr std::uint64_t kSysGetgid = 47;
 constexpr std::uint64_t kSysGettimeofday = 116;
 constexpr std::uint64_t kSysClockGettime = 232;
+constexpr std::uint64_t kSysClockGetres = 234;
+constexpr std::uint64_t kSysNanosleep = 240;
 
 constexpr std::uint64_t kErrFault = 14;
 constexpr std::uint64_t kErrInvalid = 22;
@@ -75,6 +78,32 @@ void CompleteError(
     context.rcx = nextRip;
     context.rflags |= kCarryFlag;
     context.r11 = context.rflags;
+}
+
+template <typename T>
+bool ReadGuest(
+    hle::GuestMemoryAccess* memory,
+    std::uint64_t address,
+    T& value) {
+    if (memory == nullptr || address == 0) {
+        return false;
+    }
+
+    std::array<std::byte, sizeof(T)> bytes{};
+
+    try {
+        memory->Read(
+            address,
+            bytes);
+    } catch (const std::exception&) {
+        return false;
+    }
+
+    std::memcpy(
+        &value,
+        bytes.data(),
+        sizeof(value));
+    return true;
 }
 
 template <typename T>
@@ -206,6 +235,83 @@ bool ResolveClock(
     }
 }
 
+
+template <typename HostClock>
+std::uint64_t ClockResolutionNanoseconds() {
+    using Period = typename HostClock::period;
+
+    const auto numerator =
+        static_cast<std::uint64_t>(
+            Period::num);
+    const auto denominator =
+        static_cast<std::uint64_t>(
+            Period::den);
+
+    constexpr std::uint64_t billion =
+        1000000000ull;
+
+    if (numerator >
+        std::numeric_limits<std::uint64_t>::max() /
+            billion) {
+        return 1;
+    }
+
+    const auto scaled =
+        numerator * billion;
+    const auto rounded =
+        (scaled + denominator - 1) /
+        denominator;
+
+    return rounded == 0 ? 1 : rounded;
+}
+
+bool ResolveClockResolution(
+    std::int32_t clockId,
+    GuestTimespec& value) {
+    std::uint64_t nanoseconds = 0;
+
+    switch (clockId) {
+    case 0:
+    case 9:
+    case 10:
+    case 13:
+        nanoseconds =
+            ClockResolutionNanoseconds<
+                std::chrono::system_clock>();
+        break;
+
+    case 1:
+    case 2:
+        nanoseconds =
+            (1000000000ull +
+             static_cast<std::uint64_t>(
+                 CLOCKS_PER_SEC) -
+             1) /
+            static_cast<std::uint64_t>(
+                CLOCKS_PER_SEC);
+        break;
+
+    case 4:
+    case 5:
+    case 7:
+    case 8:
+    case 11:
+    case 12:
+        nanoseconds =
+            ClockResolutionNanoseconds<
+                std::chrono::steady_clock>();
+        break;
+
+    default:
+        return false;
+    }
+
+    value =
+        SplitNanoseconds(
+            nanoseconds);
+    return true;
+}
+
 void DispatchGettimeofday(
     SysvGuestContext& context,
     std::uint64_t syscallAddress,
@@ -267,6 +373,124 @@ void DispatchClockGettime(
             syscallAddress,
             kErrFault);
         return;
+    }
+
+    CompleteSuccess(
+        context,
+        syscallAddress,
+        0);
+}
+
+
+void DispatchClockGetres(
+    SysvGuestContext& context,
+    std::uint64_t syscallAddress,
+    hle::GuestMemoryAccess* memory) {
+    GuestTimespec value;
+
+    if (!ResolveClockResolution(
+            static_cast<std::int32_t>(
+                context.rdi),
+            value)) {
+        CompleteError(
+            context,
+            syscallAddress,
+            kErrInvalid);
+        return;
+    }
+
+    if (!WriteGuest(
+            memory,
+            context.rsi,
+            value)) {
+        CompleteError(
+            context,
+            syscallAddress,
+            kErrFault);
+        return;
+    }
+
+    CompleteSuccess(
+        context,
+        syscallAddress,
+        0);
+}
+
+void DispatchNanosleep(
+    SysvGuestContext& context,
+    std::uint64_t syscallAddress,
+    hle::GuestMemoryAccess* memory) {
+    GuestTimespec request;
+
+    if (!ReadGuest(
+            memory,
+            context.rdi,
+            request)) {
+        CompleteError(
+            context,
+            syscallAddress,
+            kErrFault);
+        return;
+    }
+
+    if (request.seconds < 0 ||
+        request.nanoseconds < 0 ||
+        request.nanoseconds >= 1000000000ll) {
+        CompleteError(
+            context,
+            syscallAddress,
+            kErrInvalid);
+        return;
+    }
+
+    const auto seconds =
+        static_cast<std::uint64_t>(
+            request.seconds);
+    const auto nanoseconds =
+        static_cast<std::uint64_t>(
+            request.nanoseconds);
+
+    constexpr auto maximum =
+        static_cast<std::uint64_t>(
+            std::numeric_limits<std::int64_t>::max());
+
+    if (seconds > maximum / 1000000000ull) {
+        CompleteError(
+            context,
+            syscallAddress,
+            kErrInvalid);
+        return;
+    }
+
+    const auto total =
+        seconds * 1000000000ull +
+        nanoseconds;
+
+    if (total > maximum) {
+        CompleteError(
+            context,
+            syscallAddress,
+            kErrInvalid);
+        return;
+    }
+
+    std::this_thread::sleep_for(
+        std::chrono::nanoseconds(
+            static_cast<std::int64_t>(total)));
+
+    if (context.rsi != 0) {
+        const GuestTimespec remaining{};
+
+        if (!WriteGuest(
+                memory,
+                context.rsi,
+                remaining)) {
+            CompleteError(
+                context,
+                syscallAddress,
+                kErrFault);
+            return;
+        }
     }
 
     CompleteSuccess(
@@ -341,6 +565,20 @@ NativeSyscallDispatcher::Dispatch(
 
     case kSysClockGettime:
         DispatchClockGettime(
+            context,
+            syscallAddress,
+            memory);
+        break;
+
+    case kSysClockGetres:
+        DispatchClockGetres(
+            context,
+            syscallAddress,
+            memory);
+        break;
+
+    case kSysNanosleep:
+        DispatchNanosleep(
             context,
             syscallAddress,
             memory);
