@@ -57,12 +57,41 @@ int main() {
     assert(frame.returnValue == 42);
     assert(frame.errorCode == 0);
 
+    registry.RegisterSymbol(
+        "libkernel",
+        "sceKernelOpen",
+        [](ps5emu::hle::HleCallFrame& call) {
+            call.returnValue = 0x1234;
+        });
+
+    const auto* computed =
+        registry.Find("libkernel", "1G3lF1Gg1k8");
+    assert(computed != nullptr);
+    assert(computed->debugName == "sceKernelOpen");
+
+    ps5emu::hle::HleCallFrame computedFrame;
+    assert(registry.Invoke(
+        "libkernel",
+        "1G3lF1Gg1k8",
+        computedFrame));
+    assert(computedFrame.returnValue == 0x1234);
+    assert(registry.Size() == 2);
+
+    assert(ThrowsRuntimeError([&] {
+        registry.RegisterSymbol(
+            "libkernel",
+            "sceKernelOpen",
+            [](ps5emu::hle::HleCallFrame&) {});
+    }));
+
     assert(!registry.Invoke("libkernel", "MISSING_NID", frame));
     assert(registry.Find("missing", "TEST_NID") == nullptr);
 
     // Null bytes must not let a caller move the module/NID boundary.
     const std::string invalidModule("libkernel\0extra", 15);
     const std::string invalidNid("extra\0TEST_NID", 14);
+    const std::string invalidSymbol("sceKernel\0Open", 14);
+
     assert(ThrowsInvalidArgument([&] {
         registry.Register("libkernel", invalidNid, "invalid",
                           [](ps5emu::hle::HleCallFrame&) {});
@@ -71,11 +100,18 @@ int main() {
         registry.Register(invalidModule, "TEST_NID", "invalid",
                           [](ps5emu::hle::HleCallFrame&) {});
     }));
+    assert(ThrowsInvalidArgument([&] {
+        registry.RegisterSymbol(
+            "libkernel",
+            invalidSymbol,
+            [](ps5emu::hle::HleCallFrame&) {});
+    }));
+
     assert(registry.Find(invalidModule, "TEST_NID") == nullptr);
     assert(registry.Find("libkernel", invalidNid) == nullptr);
     assert(!registry.Invoke("libkernel", invalidNid, frame));
     assert(frame.returnValue == 42);
-    assert(registry.Size() == 1);
+    assert(registry.Size() == 2);
 
     assert(ThrowsRuntimeError([&] {
         registry.Register(
@@ -98,6 +134,13 @@ int main() {
             "libkernel",
             "",
             "invalid",
+            [](ps5emu::hle::HleCallFrame&) {});
+    }));
+
+    assert(ThrowsInvalidArgument([&] {
+        registry.RegisterSymbol(
+            "libkernel",
+            "",
             [](ps5emu::hle::HleCallFrame&) {});
     }));
 

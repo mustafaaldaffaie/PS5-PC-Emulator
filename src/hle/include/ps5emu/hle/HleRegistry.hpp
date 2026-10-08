@@ -32,6 +32,10 @@ public:
                   std::string debugName,
                   HleHandler handler);
 
+    void RegisterSymbol(std::string module,
+                        std::string symbolName,
+                        HleHandler handler);
+
     [[nodiscard]] const HleService*
     Find(std::string_view module,
          std::string_view nid) const;
