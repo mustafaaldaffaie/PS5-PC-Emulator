@@ -32,7 +32,8 @@
 - [x] Qualified SCE import identity decoding
 - [ ] NID name database and forward hashing
 - [x] HLE service registry foundation
-- [ ] Guest-call trampolines
+- [x] Synthetic guest thunk allocation and relocation binding
+- [ ] Guest-call ABI dispatch
 - [ ] Threading primitives
 - [ ] Time and synchronization
 - [ ] Filesystem
