@@ -17,6 +17,11 @@ void HleRegistry::Register(std::string module,
         throw std::invalid_argument("HLE NID cannot be empty");
     }
 
+    if (module.find('\0') != std::string::npos ||
+        nid.find('\0') != std::string::npos) {
+        throw std::invalid_argument("HLE identifiers cannot contain null bytes");
+    }
+
     if (!handler) {
         throw std::invalid_argument("HLE handler cannot be empty");
     }
@@ -39,6 +44,10 @@ void HleRegistry::Register(std::string module,
 const HleService* HleRegistry::Find(
     std::string_view module,
     std::string_view nid) const {
+    if (module.find('\0') != std::string_view::npos ||
+        nid.find('\0') != std::string_view::npos) {
+        return nullptr;
+    }
     const auto iterator = services_.find(MakeKey(module, nid));
     if (iterator == services_.end()) {
         return nullptr;

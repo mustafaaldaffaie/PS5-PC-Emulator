@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <stdexcept>
+#include <string>
 
 namespace {
 
@@ -58,6 +59,23 @@ int main() {
 
     assert(!registry.Invoke("libkernel", "MISSING_NID", frame));
     assert(registry.Find("missing", "TEST_NID") == nullptr);
+
+    // Null bytes must not let a caller move the module/NID boundary.
+    const std::string invalidModule("libkernel\0extra", 15);
+    const std::string invalidNid("extra\0TEST_NID", 14);
+    assert(ThrowsInvalidArgument([&] {
+        registry.Register("libkernel", invalidNid, "invalid",
+                          [](ps5emu::hle::HleCallFrame&) {});
+    }));
+    assert(ThrowsInvalidArgument([&] {
+        registry.Register(invalidModule, "TEST_NID", "invalid",
+                          [](ps5emu::hle::HleCallFrame&) {});
+    }));
+    assert(registry.Find(invalidModule, "TEST_NID") == nullptr);
+    assert(registry.Find("libkernel", invalidNid) == nullptr);
+    assert(!registry.Invoke("libkernel", invalidNid, frame));
+    assert(frame.returnValue == 42);
+    assert(registry.Size() == 1);
 
     assert(ThrowsRuntimeError([&] {
         registry.Register(
