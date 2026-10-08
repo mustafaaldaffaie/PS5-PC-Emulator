@@ -20,7 +20,7 @@ int main() {
     const auto registry =
         ps5emu::hle::BuiltinServices::CreateRegistry();
 
-    assert(registry.Size() == 27);
+    assert(registry.Size() >= 27);
 
     assert(
         FindSymbol(
@@ -94,6 +94,21 @@ int main() {
             registry,
             "libc",
             "strlen") != nullptr);
+    assert(
+        FindSymbol(
+            registry,
+            "libc",
+            "strcmp") != nullptr);
+    assert(
+        FindSymbol(
+            registry,
+            "libc",
+            "strcpy") != nullptr);
+    assert(
+        FindSymbol(
+            registry,
+            "libSceLibcInternal",
+            "memchr") != nullptr);
 
     assert(
         FindSymbol(

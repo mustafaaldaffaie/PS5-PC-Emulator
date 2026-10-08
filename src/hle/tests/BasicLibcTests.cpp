@@ -107,7 +107,7 @@ int main() {
     ps5emu::hle::HleRegistry registry;
     ps5emu::hle::BasicLibc::Register(registry, "libc");
 
-    assert(registry.Size() == 6);
+    assert(registry.Size() == 13);
 
     TestMemory memory(128);
 
@@ -252,6 +252,162 @@ int main() {
             memory,
             std::numeric_limits<std::uint64_t>::max(),
             0) == 0);
+    }
+
+
+    {
+        const std::vector<std::byte> bytes{
+            std::byte{0x10},
+            std::byte{0x20},
+            std::byte{0x30},
+            std::byte{0x20},
+        };
+        memory.Write(8, bytes);
+
+        assert(Invoke(
+            registry,
+            "memchr",
+            memory,
+            8,
+            0x20,
+            bytes.size()) == 9);
+        assert(Invoke(
+            registry,
+            "memchr",
+            memory,
+            8,
+            0xff,
+            bytes.size()) == 0);
+        assert(Invoke(
+            registry,
+            "memchr",
+            memory,
+            std::numeric_limits<std::uint64_t>::max(),
+            0,
+            0) == 0);
+    }
+
+    {
+        const std::vector<std::byte> alpha{
+            std::byte{'a'},
+            std::byte{'b'},
+            std::byte{'c'},
+            std::byte{0},
+        };
+        const std::vector<std::byte> beta{
+            std::byte{'a'},
+            std::byte{'b'},
+            std::byte{'d'},
+            std::byte{0},
+        };
+        memory.Write(20, alpha);
+        memory.Write(28, beta);
+
+        assert(
+            static_cast<std::int64_t>(
+                Invoke(
+                    registry,
+                    "strcmp",
+                    memory,
+                    20,
+                    28)) < 0);
+        assert(Invoke(
+            registry,
+            "strcmp",
+            memory,
+            20,
+            20) == 0);
+        assert(Invoke(
+            registry,
+            "strncmp",
+            memory,
+            20,
+            28,
+            2) == 0);
+        assert(
+            static_cast<std::int64_t>(
+                Invoke(
+                    registry,
+                    "strncmp",
+                    memory,
+                    20,
+                    28,
+                    3)) < 0);
+        assert(Invoke(
+            registry,
+            "strncmp",
+            memory,
+            std::numeric_limits<std::uint64_t>::max(),
+            std::numeric_limits<std::uint64_t>::max(),
+            0) == 0);
+    }
+
+    {
+        const std::vector<std::byte> source{
+            std::byte{'p'},
+            std::byte{'s'},
+            std::byte{'5'},
+            std::byte{0},
+        };
+        memory.Write(48, source);
+
+        assert(Invoke(
+            registry,
+            "strcpy",
+            memory,
+            52,
+            48) == 52);
+        assert(memory.At(52) == std::byte{'p'});
+        assert(memory.At(55) == std::byte{0});
+
+        assert(Invoke(
+            registry,
+            "strncpy",
+            memory,
+            56,
+            48,
+            6) == 56);
+        assert(memory.At(56) == std::byte{'p'});
+        assert(memory.At(59) == std::byte{0});
+        assert(memory.At(60) == std::byte{0});
+        assert(memory.At(61) == std::byte{0});
+
+        assert(Invoke(
+            registry,
+            "strncpy",
+            memory,
+            std::numeric_limits<std::uint64_t>::max(),
+            std::numeric_limits<std::uint64_t>::max(),
+            0) ==
+            std::numeric_limits<std::uint64_t>::max());
+    }
+
+    {
+        const std::vector<std::byte> source{
+            std::byte{0xaa},
+            std::byte{0xbb},
+            std::byte{0xcc},
+        };
+        memory.Write(100, source);
+
+        assert(Invoke(
+            registry,
+            "bcopy",
+            memory,
+            100,
+            104,
+            3) == 0);
+        assert(memory.At(104) == std::byte{0xaa});
+        assert(memory.At(106) == std::byte{0xcc});
+
+        assert(Invoke(
+            registry,
+            "bzero",
+            memory,
+            104,
+            3) == 0);
+        assert(memory.At(104) == std::byte{0});
+        assert(memory.At(106) == std::byte{0});
     }
 
     {
