@@ -1,5 +1,7 @@
 #include <ps5emu/hle/HleRegistry.hpp>
 
+#include <ps5emu/hle/Nid.hpp>
+
 #include <stdexcept>
 #include <utility>
 
@@ -39,6 +41,23 @@ void HleRegistry::Register(std::string module,
     service.handler = std::move(handler);
 
     services_.emplace(key, std::move(service));
+}
+
+void HleRegistry::RegisterSymbol(
+    std::string module,
+    std::string symbolName,
+    HleHandler handler) {
+    if (symbolName.find('\0') != std::string::npos) {
+        throw std::invalid_argument(
+            "HLE symbol name cannot contain null bytes");
+    }
+
+    auto nid = Nid::Compute(symbolName);
+    Register(
+        std::move(module),
+        std::move(nid),
+        std::move(symbolName),
+        std::move(handler));
 }
 
 const HleService* HleRegistry::Find(
