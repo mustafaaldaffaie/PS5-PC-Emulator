@@ -4,6 +4,7 @@
 #include <limits>
 #include <mutex>
 #include <stdexcept>
+#include <vector>
 
 #if defined(_WIN32)
 #ifndef NOMINMAX
@@ -25,6 +26,10 @@ struct NativeHleTrapBridge::Scope::State {
     std::atomic<std::uint64_t> thunkCount{0};
     std::atomic<std::uint64_t> escapeRip{0};
     std::atomic<std::uint64_t> capturedRip{0};
+    std::atomic<std::uint64_t> capturedBreakpoint{0};
+    std::vector<std::uint64_t> additionalBreakpointStorage;
+    const std::uint64_t* additionalBreakpoints = nullptr;
+    std::size_t additionalBreakpointCount = 0;
 };
 
 namespace {
@@ -69,6 +74,32 @@ bool MatchesThunk(
         delta / slotSize < count;
 }
 
+bool MatchesAdditionalBreakpoint(
+    const TrapState& state,
+    std::uint64_t breakpointAddress) noexcept {
+    for (std::size_t index = 0;
+         index < state.additionalBreakpointCount;
+         ++index) {
+        if (state.additionalBreakpoints[index] ==
+            breakpointAddress) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool MatchesTrap(
+    TrapState& state,
+    std::uint64_t breakpointAddress) noexcept {
+    return MatchesThunk(
+               state,
+               breakpointAddress) ||
+        MatchesAdditionalBreakpoint(
+               state,
+               breakpointAddress);
+}
+
 #if defined(_WIN32)
 
 void* g_vectoredHandler = nullptr;
@@ -85,7 +116,7 @@ LONG CALLBACK VectoredTrapHandler(
 
     auto* state =
         g_activeTrap.load(
-            std::memory_order_relaxed);
+            std::memory_order_acquire);
 
     if (state == nullptr) {
         return EXCEPTION_CONTINUE_SEARCH;
@@ -95,7 +126,7 @@ LONG CALLBACK VectoredTrapHandler(
         reinterpret_cast<std::uintptr_t>(
             exception->ExceptionRecord->ExceptionAddress);
 
-    if (!MatchesThunk(
+    if (!MatchesTrap(
             *state,
             breakpointAddress)) {
         return EXCEPTION_CONTINUE_SEARCH;
@@ -112,6 +143,9 @@ LONG CALLBACK VectoredTrapHandler(
 
     state->capturedRip.store(
         guestRip,
+        std::memory_order_relaxed);
+    state->capturedBreakpoint.store(
+        breakpointAddress,
         std::memory_order_relaxed);
 
     exception->ContextRecord->Rip =
@@ -198,7 +232,7 @@ void LinuxTrapHandler(
 
     auto* state =
         g_activeTrap.load(
-            std::memory_order_relaxed);
+            std::memory_order_acquire);
 
     if (state == nullptr) {
         ForwardLinuxTrap(
@@ -227,7 +261,7 @@ void LinuxTrapHandler(
     const auto breakpointAddress =
         guestRip - 1;
 
-    if (!MatchesThunk(
+    if (!MatchesTrap(
             *state,
             breakpointAddress)) {
         ForwardLinuxTrap(
@@ -239,6 +273,9 @@ void LinuxTrapHandler(
 
     state->capturedRip.store(
         guestRip,
+        std::memory_order_relaxed);
+    state->capturedBreakpoint.store(
+        breakpointAddress,
         std::memory_order_relaxed);
 
     context->uc_mcontext.gregs[REG_RIP] =
@@ -306,15 +343,18 @@ NativeHleTrapBridge::Scope::Scope(
     std::uint64_t thunkBase,
     std::size_t slotSize,
     std::size_t thunkCount,
-    std::uint64_t escapeRip) {
-    if (slotSize == 0) {
+    std::uint64_t escapeRip,
+    std::span<const std::uint64_t> additionalBreakpoints) {
+    if (thunkCount != 0 &&
+        slotSize == 0) {
         throw std::invalid_argument(
             "Native HLE trap slot size cannot be zero");
     }
 
-    if (thunkCount == 0) {
+    if (thunkCount == 0 &&
+        additionalBreakpoints.empty()) {
         throw std::invalid_argument(
-            "Native HLE trap count cannot be zero");
+            "Native trap scope must contain at least one trap");
     }
 
     if (escapeRip == 0) {
@@ -337,9 +377,10 @@ NativeHleTrapBridge::Scope::Scope(
         static_cast<std::uint64_t>(
             thunkCount);
 
-    if (count64 >
-        std::numeric_limits<std::uint64_t>::max() /
-            slotSize64) {
+    if (count64 != 0 &&
+        count64 >
+            std::numeric_limits<std::uint64_t>::max() /
+                slotSize64) {
         throw std::overflow_error(
             "Native HLE trap arena size overflows");
     }
@@ -355,6 +396,13 @@ NativeHleTrapBridge::Scope::Scope(
     }
 
     state_ = new State;
+    state_->additionalBreakpointStorage.assign(
+        additionalBreakpoints.begin(),
+        additionalBreakpoints.end());
+    state_->additionalBreakpoints =
+        state_->additionalBreakpointStorage.data();
+    state_->additionalBreakpointCount =
+        state_->additionalBreakpointStorage.size();
     state_->thunkBase.store(
         thunkBase,
         std::memory_order_relaxed);
@@ -415,6 +463,16 @@ NativeHleTrapBridge::Scope::CapturedRip() const noexcept {
         std::memory_order_relaxed);
 }
 
+std::uint64_t
+NativeHleTrapBridge::Scope::CapturedBreakpointAddress() const noexcept {
+    if (state_ == nullptr) {
+        return 0;
+    }
+
+    return state_->capturedBreakpoint.load(
+        std::memory_order_relaxed);
+}
+
 NativeHleTrapBridge::NativeHleTrapBridge() {
     AcquirePlatformHandler();
 }
@@ -428,12 +486,14 @@ NativeHleTrapBridge::Arm(
     std::uint64_t thunkBase,
     std::size_t slotSize,
     std::size_t thunkCount,
-    std::uint64_t escapeRip) {
+    std::uint64_t escapeRip,
+    std::span<const std::uint64_t> additionalBreakpoints) {
     return Scope(
         thunkBase,
         slotSize,
         thunkCount,
-        escapeRip);
+        escapeRip,
+        additionalBreakpoints);
 }
 
 } // namespace ps5emu::runtime

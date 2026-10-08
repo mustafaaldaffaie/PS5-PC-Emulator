@@ -2,15 +2,18 @@
 
 #include <cstddef>
 #include <span>
+#include <vector>
 
 #include <ps5emu/runtime/GuestExecutionBuilder.hpp>
 #include <ps5emu/runtime/NativeImageMaterializer.hpp>
+#include <ps5emu/runtime/NativeSyscallInterceptor.hpp>
 
 namespace ps5emu::runtime {
 
 struct PreparedNativeExecution {
     PreparedGuestExecution guest;
     NativeImage nativeImage;
+    std::vector<NativeSyscallTrap> syscallTraps;
 };
 
 class NativeExecutionBuilder final {

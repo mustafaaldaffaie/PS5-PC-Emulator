@@ -1,6 +1,8 @@
 #include <ps5emu/runtime/NativeHleExecutor.hpp>
 
+#include <algorithm>
 #include <stdexcept>
+#include <vector>
 
 #include <ps5emu/runtime/HleTrapHandler.hpp>
 #include <ps5emu/runtime/NativeGuestMemoryAccess.hpp>
@@ -11,14 +13,23 @@ NativeHleExecutionResult NativeHleExecutor::Run(
     SysvGuestContext& context,
     NativeImage& nativeImage,
     const hle::HleRegistry& registry,
-    const HleThunkTable& thunks) {
+    const HleThunkTable& thunks,
+    std::span<const NativeSyscallTrap> syscallTraps) {
     NativeHleExecutionResult result;
 
-    if (thunks.Size() == 0) {
+    if (thunks.Size() == 0 &&
+        syscallTraps.empty()) {
         executor_.Run(
             context,
             nativeImage);
         return result;
+    }
+
+    std::vector<std::uint64_t> syscallAddresses;
+    syscallAddresses.reserve(syscallTraps.size());
+    for (const auto& trap : syscallTraps) {
+        syscallAddresses.push_back(
+            trap.guestAddress);
     }
 
     NativeGuestMemoryAccess nativeMemory(
@@ -28,6 +39,7 @@ NativeHleExecutionResult NativeHleExecutor::Run(
 
     while (true) {
         std::uint64_t capturedRip = 0;
+        std::uint64_t capturedBreakpoint = 0;
 
         {
             auto scope =
@@ -35,7 +47,8 @@ NativeHleExecutionResult NativeHleExecutor::Run(
                     thunks.BaseAddress(),
                     thunks.SlotSize(),
                     thunks.Size(),
-                    executor_.EscapeAddress());
+                    executor_.EscapeAddress(),
+                    syscallAddresses);
 
             if (resume) {
                 executor_.Resume(
@@ -49,9 +62,25 @@ NativeHleExecutionResult NativeHleExecutor::Run(
 
             capturedRip =
                 scope.CapturedRip();
+            capturedBreakpoint =
+                scope.CapturedBreakpointAddress();
         }
 
         if (capturedRip == 0) {
+            return result;
+        }
+
+        const auto syscall =
+            std::find(
+                syscallAddresses.begin(),
+                syscallAddresses.end(),
+                capturedBreakpoint);
+
+        if (syscall != syscallAddresses.end()) {
+            context.rip = capturedBreakpoint;
+            result.interceptedSyscall = true;
+            result.syscallNumber = context.rax;
+            result.syscallAddress = capturedBreakpoint;
             return result;
         }
 

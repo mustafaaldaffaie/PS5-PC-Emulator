@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 
 namespace ps5emu::runtime {
 
@@ -26,6 +27,7 @@ public:
 
         [[nodiscard]] bool Captured() const noexcept;
         [[nodiscard]] std::uint64_t CapturedRip() const noexcept;
+        [[nodiscard]] std::uint64_t CapturedBreakpointAddress() const noexcept;
 
     private:
         friend class NativeHleTrapBridge;
@@ -33,7 +35,8 @@ public:
         Scope(std::uint64_t thunkBase,
               std::size_t slotSize,
               std::size_t thunkCount,
-              std::uint64_t escapeRip);
+              std::uint64_t escapeRip,
+              std::span<const std::uint64_t> additionalBreakpoints);
 
         State* state_ = nullptr;
     };
@@ -51,7 +54,8 @@ public:
     Arm(std::uint64_t thunkBase,
         std::size_t slotSize,
         std::size_t thunkCount,
-        std::uint64_t escapeRip);
+        std::uint64_t escapeRip,
+        std::span<const std::uint64_t> additionalBreakpoints = {});
 };
 
 } // namespace ps5emu::runtime

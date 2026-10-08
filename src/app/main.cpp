@@ -125,7 +125,19 @@ int RunNativeExecutable(
             prepared.guest.context,
             prepared.nativeImage,
             prepared.guest.registry,
-            prepared.guest.thunks);
+            prepared.guest.thunks,
+            prepared.syscallTraps);
+
+    if (result.interceptedSyscall) {
+        std::cout << "Intercepted unsupported guest syscall "
+                  << result.syscallNumber
+                  << " at 0x"
+                  << std::hex
+                  << result.syscallAddress
+                  << std::dec
+                  << "\n";
+        return 3;
+    }
 
     std::cout << "Native guest returned.\n";
     std::cout << "Handled HLE traps: "
