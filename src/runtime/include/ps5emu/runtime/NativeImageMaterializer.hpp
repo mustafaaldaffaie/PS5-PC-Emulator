@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
+#include <shared_mutex>
 #include <span>
 #include <vector>
 
@@ -23,12 +25,12 @@ public:
     NativeImage(const NativeImage&) = delete;
     NativeImage& operator=(const NativeImage&) = delete;
 
-    NativeImage(NativeImage&&) noexcept = default;
-    NativeImage& operator=(NativeImage&&) noexcept = default;
+    NativeImage(NativeImage&& other) noexcept;
+    NativeImage& operator=(NativeImage&& other) noexcept;
 
     [[nodiscard]] bool
     Contains(std::uint64_t guestAddress,
-             std::size_t size) const noexcept;
+             std::size_t size) const;
 
     [[nodiscard]] void*
     HostAddress(std::uint64_t guestAddress,
@@ -38,8 +40,12 @@ public:
     HostAddress(std::uint64_t guestAddress,
                 std::size_t size = 1) const;
 
-    [[nodiscard]] const std::vector<NativeImageMapping>&
-    Mappings() const noexcept;
+    [[nodiscard]] std::vector<NativeImageMapping>
+    Mappings() const;
+
+    [[nodiscard]] std::optional<NativeImageMapping>
+    FindMapping(std::uint64_t guestAddress,
+                std::size_t size) const;
 
     // Adds a new fixed-address native mapping after initial materialization.
     // The guest address must satisfy the host allocation granularity. The
@@ -60,6 +66,7 @@ public:
 private:
     friend class NativeImageMaterializer;
 
+    mutable std::shared_mutex mutex_;
     std::vector<NativeImageMapping> mappings_;
     std::vector<NativeMemoryRegion> reservations_;
 };

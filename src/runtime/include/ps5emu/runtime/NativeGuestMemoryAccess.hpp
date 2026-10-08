@@ -20,7 +20,7 @@ public:
         std::span<const std::byte> input) override;
 
 private:
-    [[nodiscard]] const NativeImageMapping&
+    [[nodiscard]] NativeImageMapping
     FindMapping(
         std::uint64_t guestAddress,
         std::size_t size) const;
