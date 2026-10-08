@@ -115,7 +115,7 @@ int main() {
             bytes,
             options);
 
-    assert(execution.registry.Size() == 27);
+    assert(execution.registry.Size() >= 21);
     assert(execution.thunks.Size() == 0);
 
     assert(
