@@ -1,10 +1,13 @@
 #include <ps5emu/runtime/NativeImageMaterializer.hpp>
 
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
+#include <thread>
+#include <vector>
 
 namespace {
 
@@ -344,6 +347,66 @@ int main() {
                 NativeImageMaterializer::Materialize(
                     conflicting));
         }));
+    }
+
+
+    {
+        std::atomic<bool> stop{false};
+        std::atomic<bool> failed{false};
+
+        std::vector<std::thread> readers;
+        for (int index = 0; index < 4; ++index) {
+            readers.emplace_back([&] {
+                while (!stop.load(
+                    std::memory_order_acquire)) {
+                    const auto snapshot =
+                        native.Mappings();
+
+                    if (snapshot.empty() ||
+                        !native.Contains(
+                            codeAddress,
+                            1) ||
+                        !native.FindMapping(
+                            codeAddress,
+                            1).has_value()) {
+                        failed.store(
+                            true,
+                            std::memory_order_release);
+                        break;
+                    }
+                }
+            });
+        }
+
+        constexpr std::uint64_t concurrentBase =
+            reservationBase + 0x2000000ull;
+
+        for (std::uint64_t index = 0;
+             index < 8;
+             ++index) {
+            native.AddMapping(
+                concurrentBase +
+                    index * 0x20000ull,
+                0x1000,
+                Protection::Read |
+                    Protection::Write);
+        }
+
+        stop.store(
+            true,
+            std::memory_order_release);
+
+        for (auto& reader : readers) {
+            reader.join();
+        }
+
+        assert(!failed.load(
+            std::memory_order_acquire));
+
+        assert(
+            native.FindMapping(
+                concurrentBase,
+                1).has_value());
     }
 
     return 0;

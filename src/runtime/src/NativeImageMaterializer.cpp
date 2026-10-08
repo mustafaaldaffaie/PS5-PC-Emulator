@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <limits>
+#include <mutex>
+#include <shared_mutex>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -153,9 +155,33 @@ std::size_t FindReservation(
 
 } // namespace
 
+NativeImage::NativeImage(
+    NativeImage&& other) noexcept {
+    std::unique_lock lock(other.mutex_);
+    mappings_ = std::move(other.mappings_);
+    reservations_ = std::move(other.reservations_);
+}
+
+NativeImage& NativeImage::operator=(
+    NativeImage&& other) noexcept {
+    if (this == &other) {
+        return *this;
+    }
+
+    std::scoped_lock lock(
+        mutex_,
+        other.mutex_);
+
+    mappings_ = std::move(other.mappings_);
+    reservations_ = std::move(other.reservations_);
+    return *this;
+}
+
 bool NativeImage::Contains(
     std::uint64_t guestAddress,
-    std::size_t size) const noexcept {
+    std::size_t size) const {
+    std::shared_lock lock(mutex_);
+
     for (const auto& mapping : mappings_) {
         if (RangeContains(
                 mapping,
@@ -204,9 +230,28 @@ const void* NativeImage::HostAddress(
         static_cast<std::uintptr_t>(guestAddress));
 }
 
-const std::vector<NativeImageMapping>&
-NativeImage::Mappings() const noexcept {
+std::vector<NativeImageMapping>
+NativeImage::Mappings() const {
+    std::shared_lock lock(mutex_);
     return mappings_;
+}
+
+std::optional<NativeImageMapping>
+NativeImage::FindMapping(
+    std::uint64_t guestAddress,
+    std::size_t size) const {
+    std::shared_lock lock(mutex_);
+
+    for (const auto& mapping : mappings_) {
+        if (RangeContains(
+                mapping,
+                guestAddress,
+                size)) {
+            return mapping;
+        }
+    }
+
+    return std::nullopt;
 }
 
 void NativeImage::AddMapping(
@@ -214,6 +259,7 @@ void NativeImage::AddMapping(
     std::size_t size,
     memory::Protection protection,
     std::span<const std::byte> initialData) {
+    std::unique_lock lock(mutex_);
     if (size == 0) {
         throw std::invalid_argument(
             "Dynamic native mapping size cannot be zero");
@@ -287,6 +333,8 @@ void NativeImage::AddMapping(
 
 void NativeImage::AddMappings(
     const memory::GuestMemory& memory) {
+    std::unique_lock lock(mutex_);
+
     const auto& guestMappings =
         memory.Mappings();
 

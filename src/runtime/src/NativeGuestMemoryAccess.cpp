@@ -4,27 +4,6 @@
 #include <stdexcept>
 
 namespace ps5emu::runtime {
-namespace {
-
-bool Contains(
-    const NativeImageMapping& mapping,
-    std::uint64_t guestAddress,
-    std::size_t size) noexcept {
-    if (guestAddress < mapping.guestAddress) {
-        return false;
-    }
-
-    const auto offset =
-        guestAddress - mapping.guestAddress;
-
-    return offset <= mapping.size &&
-        size <=
-            mapping.size -
-                static_cast<std::size_t>(offset);
-}
-
-} // namespace
-
 NativeGuestMemoryAccess::NativeGuestMemoryAccess(
     NativeImage& image) noexcept
     : image_(image) {
@@ -37,7 +16,7 @@ void NativeGuestMemoryAccess::Read(
         return;
     }
 
-    const auto& mapping =
+    const auto mapping =
         FindMapping(
             guestAddress,
             output.size());
@@ -92,22 +71,21 @@ void NativeGuestMemoryAccess::Write(
         input.size());
 }
 
-const NativeImageMapping&
+NativeImageMapping
 NativeGuestMemoryAccess::FindMapping(
     std::uint64_t guestAddress,
     std::size_t size) const {
-    for (const auto& mapping :
-         image_.Mappings()) {
-        if (Contains(
-                mapping,
-                guestAddress,
-                size)) {
-            return mapping;
-        }
+    const auto mapping =
+        image_.FindMapping(
+            guestAddress,
+            size);
+
+    if (!mapping.has_value()) {
+        throw std::runtime_error(
+            "Native guest memory access is outside mapped regions");
     }
 
-    throw std::runtime_error(
-        "Native guest memory access is outside mapped regions");
+    return *mapping;
 }
 
 } // namespace ps5emu::runtime

@@ -351,39 +351,6 @@ private:
     std::vector<std::byte> bytes_;
 };
 
-bool ContainsRange(
-    const NativeImageMapping& mapping,
-    std::uint64_t address,
-    std::size_t size) noexcept {
-    if (address < mapping.guestAddress) {
-        return false;
-    }
-
-    const auto offset =
-        address - mapping.guestAddress;
-
-    return offset <= mapping.size &&
-        size <=
-            mapping.size -
-                static_cast<std::size_t>(offset);
-}
-
-const NativeImageMapping* FindMapping(
-    const NativeImage& image,
-    std::uint64_t address,
-    std::size_t size) noexcept {
-    for (const auto& mapping : image.Mappings()) {
-        if (ContainsRange(
-                mapping,
-                address,
-                size)) {
-            return &mapping;
-        }
-    }
-
-    return nullptr;
-}
-
 bool GuestFsBaseAvailable() noexcept {
 #if defined(_WIN32)
 #ifdef PF_RDWRFSGSBASE_AVAILABLE
@@ -446,13 +413,12 @@ void NativeLeafExecutor::Run(
                 "Host OS does not expose user-mode FSGSBASE");
         }
 
-        const auto* tlsMapping =
-            FindMapping(
-                nativeImage,
+        const auto tlsMapping =
+            nativeImage.FindMapping(
                 context.fsBase,
                 sizeof(std::uint64_t));
 
-        if (tlsMapping == nullptr ||
+        if (!tlsMapping.has_value() ||
             !memory::HasProtection(
                 tlsMapping->protection,
                 memory::Protection::Read)) {
@@ -461,13 +427,12 @@ void NativeLeafExecutor::Run(
         }
     }
 
-    const auto* codeMapping =
-        FindMapping(
-            nativeImage,
+    const auto codeMapping =
+        nativeImage.FindMapping(
             context.rip,
             1);
 
-    if (codeMapping == nullptr ||
+    if (!codeMapping.has_value() ||
         !memory::HasProtection(
             codeMapping->protection,
             memory::Protection::Execute)) {
@@ -480,13 +445,12 @@ void NativeLeafExecutor::Run(
             "Guest stack pointer cannot provide a synthetic return frame");
     }
 
-    const auto* stackMapping =
-        FindMapping(
-            nativeImage,
+    const auto stackMapping =
+        nativeImage.FindMapping(
             context.rsp - 16,
             16);
 
-    if (stackMapping == nullptr ||
+    if (!stackMapping.has_value() ||
         !memory::HasProtection(
             stackMapping->protection,
             memory::Protection::Write)) {
