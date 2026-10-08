@@ -6,6 +6,9 @@
 #include <utility>
 
 #if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <Windows.h>
 #elif defined(__linux__)
 #include <sys/mman.h>
