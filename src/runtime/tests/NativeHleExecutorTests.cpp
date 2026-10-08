@@ -1,4 +1,5 @@
 #include <ps5emu/runtime/NativeHleExecutor.hpp>
+#include <ps5emu/runtime/NativeSyscallInterceptor.hpp>
 
 #include <array>
 #include <cassert>
@@ -200,6 +201,86 @@ int main() {
             dataAddress,
             1)[0] ==
         std::byte{0});
+
+    {
+        constexpr std::uint64_t syscallCode =
+            base + 0x50000ull;
+        constexpr std::uint64_t syscallStack =
+            base + 0x60000ull;
+
+        GuestMemory syscallMemory;
+        syscallMemory.Map(
+            syscallCode,
+            0x1000,
+            Protection::Read |
+                Protection::Execute);
+        syscallMemory.Map(
+            syscallStack,
+            0x4000,
+            Protection::Read |
+                Protection::Write);
+
+        const std::array<std::byte, 8> syscallBytes{
+            std::byte{0xb8},
+            std::byte{0x34},
+            std::byte{0x12},
+            std::byte{0x00},
+            std::byte{0x00},
+            std::byte{0x0f},
+            std::byte{0x05},
+            std::byte{0xc3},
+        };
+
+        syscallMemory.Initialize(
+            syscallCode,
+            syscallBytes);
+
+        const auto syscallTraps =
+            ps5emu::runtime::NativeSyscallInterceptor::Rewrite(
+                syscallMemory);
+
+        assert(syscallTraps.size() == 1);
+        assert(
+            syscallTraps[0].guestAddress ==
+            syscallCode + 5);
+
+        auto syscallImage =
+            NativeImageMaterializer::Materialize(
+                syscallMemory);
+
+        ps5emu::hle::HleRegistry emptyRegistry;
+        HleThunkTable emptyThunks(
+            HleThunkTableOptions{
+                .baseAddress = base + 0x70000ull,
+                .slotSize = 16,
+                .capacity = 4,
+            });
+
+        SysvGuestContext syscallContext{
+            .rsp = syscallStack + 0x2000,
+            .rip = syscallCode,
+            .rflags = 0x202,
+        };
+
+        NativeHleExecutor syscallExecutor;
+        const auto syscallResult =
+            syscallExecutor.Run(
+                syscallContext,
+                syscallImage,
+                emptyRegistry,
+                emptyThunks,
+                syscallTraps);
+
+        assert(syscallResult.handledTrapCount == 0);
+        assert(syscallResult.interceptedSyscall);
+        assert(syscallResult.syscallNumber == 0x1234);
+        assert(
+            syscallResult.syscallAddress ==
+            syscallCode + 5);
+        assert(
+            syscallContext.rip ==
+            syscallCode + 5);
+    }
 
     return 0;
 }

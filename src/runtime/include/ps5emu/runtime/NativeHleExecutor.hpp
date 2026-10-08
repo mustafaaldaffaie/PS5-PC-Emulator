@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 
 #include <ps5emu/hle/HleRegistry.hpp>
 #include <ps5emu/runtime/GuestCallDispatcher.hpp>
@@ -9,12 +10,16 @@
 #include <ps5emu/runtime/NativeHleTrapBridge.hpp>
 #include <ps5emu/runtime/NativeImageMaterializer.hpp>
 #include <ps5emu/runtime/NativeLeafExecutor.hpp>
+#include <ps5emu/runtime/NativeSyscallInterceptor.hpp>
 
 namespace ps5emu::runtime {
 
 struct NativeHleExecutionResult {
     std::size_t handledTrapCount = 0;
     std::int64_t lastErrorCode = 0;
+    bool interceptedSyscall = false;
+    std::uint64_t syscallNumber = 0;
+    std::uint64_t syscallAddress = 0;
 };
 
 class NativeHleExecutor final {
@@ -30,7 +35,8 @@ public:
     Run(SysvGuestContext& context,
         NativeImage& nativeImage,
         const hle::HleRegistry& registry,
-        const HleThunkTable& thunks);
+        const HleThunkTable& thunks,
+        std::span<const NativeSyscallTrap> syscallTraps = {});
 
 private:
     NativeLeafExecutor executor_;

@@ -4,6 +4,7 @@
 #include <utility>
 
 #include <ps5emu/runtime/NativeInstructionGuard.hpp>
+#include <ps5emu/runtime/NativeSyscallInterceptor.hpp>
 
 namespace ps5emu::runtime {
 
@@ -14,6 +15,10 @@ PreparedNativeExecution NativeExecutionBuilder::Prepare(
         GuestExecutionBuilder::Prepare(
             executableBytes,
             options);
+
+    auto syscallTraps =
+        NativeSyscallInterceptor::Rewrite(
+            guest.memory);
 
     NativeInstructionGuard::Validate(
         guest.memory);
@@ -48,6 +53,7 @@ PreparedNativeExecution NativeExecutionBuilder::Prepare(
     return PreparedNativeExecution{
         .guest = std::move(guest),
         .nativeImage = std::move(nativeImage),
+        .syscallTraps = std::move(syscallTraps),
     };
 }
 
