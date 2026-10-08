@@ -17,6 +17,12 @@ public:
     AllocateAt(std::uintptr_t address,
                std::size_t size);
 
+    [[nodiscard]] static std::size_t
+    SystemPageSize();
+
+    [[nodiscard]] static std::size_t
+    AllocationGranularity();
+
     NativeMemoryRegion(const NativeMemoryRegion&) = delete;
     NativeMemoryRegion& operator=(const NativeMemoryRegion&) = delete;
 
@@ -29,6 +35,10 @@ public:
                std::span<const std::byte> bytes);
 
     void Protect(memory::Protection protection);
+
+    void ProtectRange(std::size_t offset,
+                      std::size_t size,
+                      memory::Protection protection);
 
     [[nodiscard]] std::byte* Data() noexcept;
     [[nodiscard]] const std::byte* Data() const noexcept;

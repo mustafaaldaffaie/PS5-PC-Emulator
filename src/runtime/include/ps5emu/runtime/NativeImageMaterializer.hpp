@@ -13,7 +13,6 @@ struct NativeImageMapping {
     std::uint64_t guestAddress = 0;
     std::size_t size = 0;
     memory::Protection protection = memory::Protection::None;
-    NativeMemoryRegion region;
 };
 
 class NativeImage final {
@@ -45,6 +44,7 @@ private:
     friend class NativeImageMaterializer;
 
     std::vector<NativeImageMapping> mappings_;
+    std::vector<NativeMemoryRegion> reservations_;
 };
 
 class NativeImageMaterializer final {

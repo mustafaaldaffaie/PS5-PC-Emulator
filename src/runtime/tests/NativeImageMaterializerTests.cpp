@@ -26,10 +26,12 @@ int main() {
     using ps5emu::memory::Protection;
     using ps5emu::runtime::NativeImageMaterializer;
 
-    constexpr std::uint64_t codeAddress =
+    constexpr std::uint64_t reservationBase =
         0x0000200000000000ull;
+    constexpr std::uint64_t codeAddress =
+        reservationBase + 0x1000ull;
     constexpr std::uint64_t dataAddress =
-        codeAddress + 0x20000ull;
+        reservationBase + 0x3000ull;
 
     GuestMemory memory;
 
@@ -117,9 +119,42 @@ int main() {
     }));
 
     {
+        GuestMemory unaligned;
+        constexpr std::uint64_t address =
+            reservationBase + 0x50123ull;
+
+        unaligned.Map(
+            address,
+            16,
+            Protection::Read);
+
+        const std::array<std::byte, 2> bytes{
+            std::byte{0x5a},
+            std::byte{0xa5},
+        };
+
+        unaligned.Initialize(
+            address,
+            bytes);
+
+        auto nativeUnaligned =
+            NativeImageMaterializer::Materialize(
+                unaligned);
+
+        const auto* nativeBytes =
+            static_cast<const std::byte*>(
+                nativeUnaligned.HostAddress(
+                    address,
+                    bytes.size()));
+
+        assert(nativeBytes[0] == std::byte{0x5a});
+        assert(nativeBytes[1] == std::byte{0xa5});
+    }
+
+    {
         GuestMemory invalid;
         invalid.Map(
-            codeAddress + 0x40000ull,
+            reservationBase + 0x70000ull,
             0x1000,
             Protection::Read |
                 Protection::Write |
@@ -133,16 +168,26 @@ int main() {
     }
 
     {
-        GuestMemory unaligned;
-        unaligned.Map(
-            codeAddress + 1,
-            0x1000,
-            Protection::Read);
+        GuestMemory conflicting;
+        const auto page =
+            reservationBase + 0x90000ull;
 
-        assert(Throws<std::invalid_argument>([&] {
+        conflicting.Map(
+            page + 0x100,
+            0x100,
+            Protection::Read |
+                Protection::Execute);
+
+        conflicting.Map(
+            page + 0x400,
+            0x100,
+            Protection::Read |
+                Protection::Write);
+
+        assert(Throws<std::runtime_error>([&] {
             static_cast<void>(
                 NativeImageMaterializer::Materialize(
-                    unaligned));
+                    conflicting));
         }));
     }
 

@@ -20,7 +20,7 @@
 namespace ps5emu::runtime {
 namespace {
 
-std::size_t PageSize() {
+std::size_t QueryPageSize() {
 #if defined(_WIN32)
     SYSTEM_INFO information{};
     GetSystemInfo(&information);
@@ -42,7 +42,7 @@ std::size_t PageSize() {
 #endif
 }
 
-std::size_t AllocationAlignment() {
+std::size_t QueryAllocationGranularity() {
 #if defined(_WIN32)
     SYSTEM_INFO information{};
     GetSystemInfo(&information);
@@ -55,7 +55,7 @@ std::size_t AllocationAlignment() {
     return static_cast<std::size_t>(
         information.dwAllocationGranularity);
 #elif defined(__linux__)
-    return PageSize();
+    return QueryPageSize();
 #endif
 }
 
@@ -184,6 +184,14 @@ NativeMemoryRegion NativeMemoryRegion::AllocateAt(
     return AllocateImpl(address, size, true);
 }
 
+std::size_t NativeMemoryRegion::SystemPageSize() {
+    return QueryPageSize();
+}
+
+std::size_t NativeMemoryRegion::AllocationGranularity() {
+    return QueryAllocationGranularity();
+}
+
 NativeMemoryRegion NativeMemoryRegion::AllocateImpl(
     std::uintptr_t requestedAddress,
     std::size_t size,
@@ -199,7 +207,9 @@ NativeMemoryRegion NativeMemoryRegion::AllocateImpl(
                 "Fixed native memory address cannot be zero");
         }
 
-        const auto alignment = AllocationAlignment();
+        const auto alignment =
+            QueryAllocationGranularity();
+
         if ((requestedAddress % alignment) != 0) {
             throw std::invalid_argument(
                 "Fixed native memory address is not allocation aligned");
@@ -207,7 +217,7 @@ NativeMemoryRegion NativeMemoryRegion::AllocateImpl(
     }
 
     const auto mappedSize =
-        RoundUp(size, PageSize());
+        RoundUp(size, QueryPageSize());
 
     void* address = nullptr;
     void* requested = fixed
@@ -345,18 +355,56 @@ void NativeMemoryRegion::Write(
 
 void NativeMemoryRegion::Protect(
     memory::Protection protection) {
+    ProtectRange(0, mappedSize_, protection);
+    protection_ = protection;
+}
+
+void NativeMemoryRegion::ProtectRange(
+    std::size_t offset,
+    std::size_t size,
+    memory::Protection protection) {
     if (address_ == nullptr) {
         throw std::runtime_error(
             "Cannot protect an empty native memory region");
     }
 
+    if (size == 0) {
+        throw std::invalid_argument(
+            "Native protection range cannot be empty");
+    }
+
+    if (offset > mappedSize_ ||
+        size > mappedSize_ - offset) {
+        throw std::out_of_range(
+            "Native protection range is outside the mapped region");
+    }
+
     ValidateProtection(protection);
+
+    const auto pageSize = QueryPageSize();
+    const auto pageStart =
+        offset - (offset % pageSize);
+
+    const auto end = offset + size;
+    const auto pageEnd =
+        RoundUp(end, pageSize);
+
+    if (pageEnd > mappedSize_) {
+        throw std::out_of_range(
+            "Native protection range exceeds the mapped pages");
+    }
+
+    auto* rangeAddress =
+        static_cast<std::byte*>(address_) +
+        pageStart;
+    const auto rangeSize =
+        pageEnd - pageStart;
 
 #if defined(_WIN32)
     DWORD previousProtection = 0;
     if (!VirtualProtect(
-            address_,
-            mappedSize_,
+            rangeAddress,
+            rangeSize,
             WindowsProtection(protection),
             &previousProtection)) {
         throw std::runtime_error(
@@ -364,20 +412,18 @@ void NativeMemoryRegion::Protect(
     }
 #elif defined(__linux__)
     if (mprotect(
-            address_,
-            mappedSize_,
+            rangeAddress,
+            rangeSize,
             LinuxProtection(protection)) != 0) {
         throw std::runtime_error(
             "mprotect failed for native memory region");
     }
 #endif
 
-    protection_ = protection;
-
     if (memory::HasProtection(
             protection,
             memory::Protection::Execute)) {
-        FlushCode(address_, mappedSize_);
+        FlushCode(rangeAddress, rangeSize);
     }
 }
 
