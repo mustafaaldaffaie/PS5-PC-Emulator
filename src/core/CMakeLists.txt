@@ -7,6 +7,7 @@ add_library(ps5emu_core STATIC
     src/elf/ImportTable.cpp
     src/elf/Relocation.cpp
     src/loader/ExecutableImageLoader.cpp
+    src/loader/RelocationApplier.cpp
     src/memory/GuestMemory.cpp
 )
 
@@ -45,4 +46,10 @@ if(PS5EMU_BUILD_TESTS)
     )
     target_link_libraries(ps5emu_executable_image_loader_tests PRIVATE ps5emu_core)
     add_test(NAME executable_image_loader COMMAND ps5emu_executable_image_loader_tests)
+
+    add_executable(ps5emu_relocation_applier_tests
+        tests/RelocationApplierTests.cpp
+    )
+    target_link_libraries(ps5emu_relocation_applier_tests PRIVATE ps5emu_core)
+    add_test(NAME relocation_applier COMMAND ps5emu_relocation_applier_tests)
 endif()
