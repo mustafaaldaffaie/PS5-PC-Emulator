@@ -20,7 +20,7 @@ int main() {
     const auto registry =
         ps5emu::hle::BuiltinServices::CreateRegistry();
 
-    assert(registry.Size() == 17);
+    assert(registry.Size() == 21);
 
     assert(
         FindSymbol(
@@ -37,6 +37,21 @@ int main() {
             registry,
             "libkernel",
             "sceKernelUsleep") != nullptr);
+    assert(
+        FindSymbol(
+            registry,
+            "libkernel",
+            "sceKernelClockGettime") != nullptr);
+    assert(
+        FindSymbol(
+            registry,
+            "libkernel",
+            "sceKernelGettimeofday") != nullptr);
+    assert(
+        FindSymbol(
+            registry,
+            "libkernel",
+            "sceKernelNanosleep") != nullptr);
 
     assert(
         FindSymbol(
