@@ -47,10 +47,12 @@ int main() {
         Protection::Read |
             Protection::Write);
 
-    const std::array<std::byte, 4> code{
-        std::byte{0x90},
-        std::byte{0x90},
-        std::byte{0x90},
+    const std::array<std::byte, 6> code{
+        std::byte{0xb8},
+        std::byte{0x2a},
+        std::byte{0x00},
+        std::byte{0x00},
+        std::byte{0x00},
         std::byte{0xc3},
     };
 
@@ -85,8 +87,20 @@ int main() {
         static_cast<const std::byte*>(
             native.HostAddress(codeAddress, 4));
 
-    assert(codeBytes[0] == std::byte{0x90});
-    assert(codeBytes[3] == std::byte{0xc3});
+    assert(codeBytes[0] == std::byte{0xb8});
+    assert(codeBytes[1] == std::byte{0x2a});
+    assert(codeBytes[5] == std::byte{0xc3});
+
+#if defined(_M_X64) || defined(__x86_64__)
+    using LeafFunction = std::uint64_t (*)();
+    const auto function =
+        reinterpret_cast<LeafFunction>(
+            native.HostAddress(
+                codeAddress,
+                code.size()));
+
+    assert(function() == 42);
+#endif
 
     auto* dataBytes =
         static_cast<std::byte*>(
