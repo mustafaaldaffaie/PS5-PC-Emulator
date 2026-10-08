@@ -13,9 +13,19 @@ namespace ps5emu::loader {
 using SymbolAddressResolver =
     std::function<std::optional<std::uint64_t>(std::uint32_t)>;
 
+struct TlsSymbolResolution {
+    std::uint64_t moduleId = 0;
+    std::uint64_t moduleOffset = 0;
+    std::int64_t threadPointerOffset = 0;
+};
+
+using TlsSymbolResolver =
+    std::function<std::optional<TlsSymbolResolution>(std::uint32_t)>;
+
 struct RelocationContext {
     std::uint64_t loadBias = 0;
     SymbolAddressResolver resolveSymbol;
+    TlsSymbolResolver resolveTlsSymbol;
 };
 
 class RelocationApplier final {

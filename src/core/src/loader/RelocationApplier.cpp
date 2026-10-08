@@ -1,6 +1,7 @@
 #include <ps5emu/loader/RelocationApplier.hpp>
 
 #include <array>
+#include <bit>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -14,6 +15,9 @@ constexpr std::uint32_t kRelocation64 = 1;
 constexpr std::uint32_t kRelocationGlobDat = 6;
 constexpr std::uint32_t kRelocationJumpSlot = 7;
 constexpr std::uint32_t kRelocationRelative = 8;
+constexpr std::uint32_t kRelocationDtPMod64 = 16;
+constexpr std::uint32_t kRelocationDtPOff64 = 17;
+constexpr std::uint32_t kRelocationTpOff64 = 18;
 
 std::uint64_t AddUnsigned(std::uint64_t lhs,
                           std::uint64_t rhs,
@@ -45,6 +49,19 @@ std::uint64_t AddSigned(std::uint64_t base,
     return base - magnitude;
 }
 
+std::int64_t AddSigned(std::int64_t lhs,
+                       std::int64_t rhs,
+                       const char* message) {
+    if ((rhs > 0 &&
+         lhs > std::numeric_limits<std::int64_t>::max() - rhs) ||
+        (rhs < 0 &&
+         lhs < std::numeric_limits<std::int64_t>::min() - rhs)) {
+        throw std::runtime_error(message);
+    }
+
+    return lhs + rhs;
+}
+
 std::uint64_t ResolveSymbol(
     std::uint32_t symbolIndex,
     const RelocationContext& context) {
@@ -63,6 +80,24 @@ std::uint64_t ResolveSymbol(
     }
 
     return *address;
+}
+
+TlsSymbolResolution ResolveTlsSymbol(
+    std::uint32_t symbolIndex,
+    const RelocationContext& context) {
+    if (!context.resolveTlsSymbol) {
+        throw std::runtime_error(
+            "TLS relocation requires a TLS symbol resolver");
+    }
+
+    const auto resolution =
+        context.resolveTlsSymbol(symbolIndex);
+    if (!resolution.has_value()) {
+        throw std::runtime_error(
+            "TLS relocation references an unresolved TLS symbol");
+    }
+
+    return *resolution;
 }
 
 void WriteU64(memory::GuestMemory& memory,
@@ -122,6 +157,44 @@ void RelocationApplier::Apply(
                 relocation.addend,
                 "R_X86_64_RELATIVE relocation value overflows");
             break;
+
+        case kRelocationDtPMod64: {
+            if (relocation.addend != 0) {
+                throw std::runtime_error(
+                    "R_X86_64_DTPMOD64 relocation has a nonzero addend");
+            }
+            value =
+                ResolveTlsSymbol(
+                    relocation.symbolIndex,
+                    context).moduleId;
+            break;
+        }
+
+        case kRelocationDtPOff64: {
+            const auto tls =
+                ResolveTlsSymbol(
+                    relocation.symbolIndex,
+                    context);
+            value = AddSigned(
+                tls.moduleOffset,
+                relocation.addend,
+                "R_X86_64_DTPOFF64 relocation value overflows");
+            break;
+        }
+
+        case kRelocationTpOff64: {
+            const auto tls =
+                ResolveTlsSymbol(
+                    relocation.symbolIndex,
+                    context);
+            const auto signedValue =
+                AddSigned(
+                    tls.threadPointerOffset,
+                    relocation.addend,
+                    "R_X86_64_TPOFF64 relocation value overflows");
+            value = std::bit_cast<std::uint64_t>(signedValue);
+            break;
+        }
 
         default:
             throw std::runtime_error(

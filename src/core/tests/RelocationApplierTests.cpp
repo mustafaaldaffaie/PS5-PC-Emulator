@@ -36,6 +36,7 @@ int main() {
     using ps5emu::elf::Relocation;
     using ps5emu::loader::RelocationApplier;
     using ps5emu::loader::RelocationContext;
+    using ps5emu::loader::TlsSymbolResolution;
     using ps5emu::memory::GuestMemory;
     using ps5emu::memory::Protection;
 
@@ -82,6 +83,18 @@ int main() {
 
         return std::nullopt;
     };
+    context.resolveTlsSymbol =
+        [](std::uint32_t index)
+            -> std::optional<TlsSymbolResolution> {
+        if (index == 4) {
+            return TlsSymbolResolution{
+                .moduleId = 3,
+                .moduleOffset = 0x18,
+                .threadPointerOffset = -0x28,
+            };
+        }
+        return std::nullopt;
+    };
 
     RelocationApplier::Apply(
         relocations,
@@ -93,9 +106,38 @@ int main() {
     assert(ReadU64(memory, 0x500020) == 0x70ffe0);
 
     {
-        const std::vector<Relocation> unresolved{
+        const std::vector<Relocation> tls{
             Relocation{
                 .offset = 0x28,
+                .symbolIndex = 4,
+                .type = 16,
+            },
+            Relocation{
+                .offset = 0x30,
+                .symbolIndex = 4,
+                .type = 17,
+                .addend = 4,
+            },
+            Relocation{
+                .offset = 0x38,
+                .symbolIndex = 4,
+                .type = 18,
+                .addend = 8,
+            },
+        };
+
+        RelocationApplier::Apply(tls, memory, context);
+
+        assert(ReadU64(memory, 0x500028) == 3);
+        assert(ReadU64(memory, 0x500030) == 0x1c);
+        assert(ReadU64(memory, 0x500038) ==
+               std::numeric_limits<std::uint64_t>::max() - 0x1f);
+    }
+
+    {
+        const std::vector<Relocation> unresolved{
+            Relocation{
+                .offset = 0x40,
                 .symbolIndex = 99,
                 .type = 6,
             },
@@ -110,9 +152,44 @@ int main() {
     }
 
     {
+        const std::vector<Relocation> unresolvedTls{
+            Relocation{
+                .offset = 0x40,
+                .symbolIndex = 99,
+                .type = 18,
+            },
+        };
+
+        assert(ThrowsRuntimeError([&] {
+            RelocationApplier::Apply(
+                unresolvedTls,
+                memory,
+                context);
+        }));
+    }
+
+    {
+        const std::vector<Relocation> invalidTlsAddend{
+            Relocation{
+                .offset = 0x40,
+                .symbolIndex = 4,
+                .type = 16,
+                .addend = 1,
+            },
+        };
+
+        assert(ThrowsRuntimeError([&] {
+            RelocationApplier::Apply(
+                invalidTlsAddend,
+                memory,
+                context);
+        }));
+    }
+
+    {
         const std::vector<Relocation> unsupported{
             Relocation{
-                .offset = 0x30,
+                .offset = 0x40,
                 .symbolIndex = 0,
                 .type = 12345,
             },
@@ -127,26 +204,25 @@ int main() {
     }
 
     {
-        // A late unresolved symbol must not publish an earlier valid patch.
         const std::vector<Relocation> partial{
-            Relocation{.offset = 0x40, .type = 8, .addend = 0x10},
-            Relocation{.offset = 0x48, .symbolIndex = 99, .type = 6},
+            Relocation{.offset = 0x48, .type = 8, .addend = 0x10},
+            Relocation{.offset = 0x50, .symbolIndex = 99, .type = 6},
         };
         assert(ThrowsRuntimeError([&] {
             RelocationApplier::Apply(partial, memory, context);
         }));
-        assert(ReadU64(memory, 0x500040) == 0);
+        assert(ReadU64(memory, 0x500048) == 0);
     }
 
     {
         const std::vector<Relocation> invalidTarget{
-            Relocation{.offset = 0x40, .type = 8, .addend = 0x10},
+            Relocation{.offset = 0x48, .type = 8, .addend = 0x10},
             Relocation{.offset = 0xfc, .type = 8, .addend = 0x20},
         };
         assert(ThrowsRuntimeError([&] {
             RelocationApplier::Apply(invalidTarget, memory, context);
         }));
-        assert(ReadU64(memory, 0x500040) == 0);
+        assert(ReadU64(memory, 0x500048) == 0);
     }
 
     {
@@ -155,21 +231,21 @@ int main() {
         const std::vector<Relocation> special{
             Relocation{.offset = std::numeric_limits<std::uint64_t>::max(),
                        .type = 0},
-            Relocation{.offset = 0x50, .symbolIndex = 0, .type = 1, .addend = 42},
+            Relocation{.offset = 0x58, .symbolIndex = 0, .type = 1, .addend = 42},
         };
         RelocationApplier::Apply(special, memory, zero);
-        assert(ReadU64(memory, 0x500050) == 42);
+        assert(ReadU64(memory, 0x500058) == 42);
     }
 
     {
         const std::vector<Relocation> underflow{
-            Relocation{.offset = 0x58, .type = 8,
+            Relocation{.offset = 0x60, .type = 8,
                        .addend = std::numeric_limits<std::int64_t>::min()},
         };
         assert(ThrowsRuntimeError([&] {
             RelocationApplier::Apply(underflow, memory, context);
         }));
-        assert(ReadU64(memory, 0x500058) == 0);
+        assert(ReadU64(memory, 0x500060) == 0);
     }
 
     return 0;
