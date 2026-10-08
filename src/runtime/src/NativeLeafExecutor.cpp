@@ -429,6 +429,14 @@ NativeLeafExecutor::NativeLeafExecutor()
     BuildTrampoline();
 }
 
+std::uint64_t
+NativeLeafExecutor::EscapeAddress() const noexcept {
+    return static_cast<std::uint64_t>(
+        reinterpret_cast<std::uintptr_t>(
+            code_.Data()) +
+        kReturnStubOffset);
+}
+
 void NativeLeafExecutor::Run(
     SysvGuestContext& context,
     const NativeImage& nativeImage) {
@@ -503,6 +511,26 @@ void NativeLeafExecutor::Run(
     state_.output.rip = 0;
     state_.output.fsBase = context.fsBase;
     context = state_.output;
+}
+
+void NativeLeafExecutor::Resume(
+    SysvGuestContext& context,
+    const NativeImage& nativeImage) {
+    if (context.rsp >
+        std::numeric_limits<std::uint64_t>::max() -
+            sizeof(std::uint64_t)) {
+        throw std::runtime_error(
+            "Guest stack pointer overflows while preparing native resume");
+    }
+
+    auto resumed = context;
+    resumed.rsp += sizeof(std::uint64_t);
+
+    Run(
+        resumed,
+        nativeImage);
+
+    context = resumed;
 }
 
 void NativeLeafExecutor::BuildTrampoline() {
