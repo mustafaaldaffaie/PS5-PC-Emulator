@@ -443,6 +443,28 @@ void MutexUnlock(HleCallFrame& frame,
     frame.returnValue = kSceOk;
 }
 
+
+std::uint64_t ToPosixError(std::uint64_t value) {
+    if (value == 0) {
+        return 0;
+    }
+
+    if ((value & 0xffff0000ull) == 0x80020000ull) {
+        return value & 0xffffull;
+    }
+
+    return value;
+}
+
+template <typename Function>
+void InvokePosix(HleCallFrame& frame,
+                 MutexState& state,
+                 Function&& function) {
+    function(frame, state);
+    frame.returnValue =
+        ToPosixError(frame.returnValue);
+}
+
 } // namespace
 
 void KernelMutex::Register(
@@ -506,10 +528,65 @@ void KernelMutex::Register(
             MutexTrylock(frame, *state);
         });
     registry.RegisterSymbol(
-        std::move(module),
+        moduleName,
         "scePthreadMutexUnlock",
         [state](HleCallFrame& frame) {
             MutexUnlock(frame, *state);
+        });
+
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_mutexattr_init",
+        [state](HleCallFrame& frame) {
+            InvokePosix(frame, *state, AttrInit);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_mutexattr_destroy",
+        [state](HleCallFrame& frame) {
+            InvokePosix(frame, *state, AttrDestroy);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_mutexattr_settype",
+        [state](HleCallFrame& frame) {
+            InvokePosix(frame, *state, AttrSetType);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_mutexattr_setprotocol",
+        [state](HleCallFrame& frame) {
+            InvokePosix(frame, *state, AttrSetProtocol);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_mutex_init",
+        [state](HleCallFrame& frame) {
+            InvokePosix(frame, *state, MutexInit);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_mutex_destroy",
+        [state](HleCallFrame& frame) {
+            InvokePosix(frame, *state, MutexDestroy);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_mutex_lock",
+        [state](HleCallFrame& frame) {
+            InvokePosix(frame, *state, MutexLock);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_mutex_trylock",
+        [state](HleCallFrame& frame) {
+            InvokePosix(frame, *state, MutexTrylock);
+        });
+    registry.RegisterSymbol(
+        std::move(module),
+        "pthread_mutex_unlock",
+        [state](HleCallFrame& frame) {
+            InvokePosix(frame, *state, MutexUnlock);
         });
 }
 

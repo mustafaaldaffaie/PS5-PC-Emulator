@@ -119,7 +119,7 @@ int main() {
         registry,
         "libkernel");
 
-    assert(registry.Size() == 9);
+    assert(registry.Size() == 18);
 
     TestMemory memory(256);
     constexpr std::uint64_t attr = 32;
@@ -273,6 +273,69 @@ int main() {
             "scePthreadMutexattrDestroy",
             attr) == ok);
     assert(memory.LoadU64(attr) == 0);
+
+
+    constexpr std::uint64_t posixAttr = 96;
+    constexpr std::uint64_t posixMutex = 128;
+
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_mutexattr_init",
+            posixAttr) == 0);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_mutexattr_settype",
+            posixAttr,
+            1) == 0);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_mutex_init",
+            posixMutex,
+            posixAttr) == 0);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_mutex_lock",
+            posixMutex) == 0);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_mutex_trylock",
+            posixMutex) == 16);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_mutex_unlock",
+            posixMutex) == 0);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_mutex_destroy",
+            posixMutex) == 0);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_mutexattr_destroy",
+            posixAttr) == 0);
+
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_mutex_init",
+            0,
+            0) == 14);
 
     assert(
         Invoke(
