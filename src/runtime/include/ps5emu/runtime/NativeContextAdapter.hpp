@@ -5,6 +5,9 @@
 #include <ps5emu/runtime/GuestCallDispatcher.hpp>
 
 #if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <Windows.h>
 #elif defined(__linux__)
 #include <ucontext.h>

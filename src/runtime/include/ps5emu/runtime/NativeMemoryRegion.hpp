@@ -1,0 +1,49 @@
+#pragma once
+
+#include <cstddef>
+#include <span>
+
+#include <ps5emu/memory/GuestMemory.hpp>
+
+namespace ps5emu::runtime {
+
+class NativeMemoryRegion final {
+public:
+    [[nodiscard]] static NativeMemoryRegion
+    Allocate(std::size_t size);
+
+    NativeMemoryRegion(const NativeMemoryRegion&) = delete;
+    NativeMemoryRegion& operator=(const NativeMemoryRegion&) = delete;
+
+    NativeMemoryRegion(NativeMemoryRegion&& other) noexcept;
+    NativeMemoryRegion& operator=(NativeMemoryRegion&& other) noexcept;
+
+    ~NativeMemoryRegion();
+
+    void Write(std::size_t offset,
+               std::span<const std::byte> bytes);
+
+    void Protect(memory::Protection protection);
+
+    [[nodiscard]] std::byte* Data() noexcept;
+    [[nodiscard]] const std::byte* Data() const noexcept;
+    [[nodiscard]] std::size_t Size() const noexcept;
+    [[nodiscard]] std::size_t MappedSize() const noexcept;
+    [[nodiscard]] memory::Protection Protection() const noexcept;
+    [[nodiscard]] bool Empty() const noexcept;
+
+private:
+    NativeMemoryRegion(void* address,
+                       std::size_t size,
+                       std::size_t mappedSize,
+                       memory::Protection protection) noexcept;
+
+    void Release() noexcept;
+
+    void* address_ = nullptr;
+    std::size_t size_ = 0;
+    std::size_t mappedSize_ = 0;
+    memory::Protection protection_ = memory::Protection::None;
+};
+
+} // namespace ps5emu::runtime
