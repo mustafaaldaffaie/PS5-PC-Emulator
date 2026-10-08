@@ -203,6 +203,86 @@ int main() {
         std::byte{0});
 
     {
+        constexpr std::uint64_t supportedCode =
+            base + 0x80000ull;
+        constexpr std::uint64_t supportedStack =
+            base + 0x90000ull;
+
+        GuestMemory supportedMemory;
+        supportedMemory.Map(
+            supportedCode,
+            0x1000,
+            Protection::Read |
+                Protection::Execute);
+        supportedMemory.Map(
+            supportedStack,
+            0x4000,
+            Protection::Read |
+                Protection::Write);
+
+        const std::array<std::byte, 12> supportedBytes{
+            std::byte{0xb8},
+            std::byte{0x14},
+            std::byte{0x00},
+            std::byte{0x00},
+            std::byte{0x00},
+            std::byte{0x0f},
+            std::byte{0x05},
+            std::byte{0x48},
+            std::byte{0x83},
+            std::byte{0xc0},
+            std::byte{0x01},
+            std::byte{0xc3},
+        };
+
+        supportedMemory.Initialize(
+            supportedCode,
+            supportedBytes);
+
+        const auto supportedTraps =
+            ps5emu::runtime::NativeSyscallInterceptor::Rewrite(
+                supportedMemory);
+
+        auto supportedImage =
+            NativeImageMaterializer::Materialize(
+                supportedMemory);
+
+        ps5emu::hle::HleRegistry emptyRegistry;
+        HleThunkTable emptyThunks(
+            HleThunkTableOptions{
+                .baseAddress = base + 0xa0000ull,
+                .slotSize = 16,
+                .capacity = 4,
+            });
+
+        SysvGuestContext supportedContext{
+            .rsp = supportedStack + 0x2000,
+            .rip = supportedCode,
+            .rflags = 0x203,
+        };
+
+        NativeHleExecutor supportedExecutor;
+        const auto supportedResult =
+            supportedExecutor.Run(
+                supportedContext,
+                supportedImage,
+                emptyRegistry,
+                emptyThunks,
+                supportedTraps);
+
+        assert(supportedResult.handledTrapCount == 0);
+        assert(supportedResult.handledSyscallCount == 1);
+        assert(!supportedResult.interceptedSyscall);
+        assert(supportedResult.syscallNumber == 20);
+        assert(
+            supportedResult.syscallAddress ==
+            supportedCode + 5);
+        assert(supportedContext.rax == 1001);
+        assert(supportedContext.rip == 0);
+        assert((supportedContext.rflags & 1u) == 0);
+    }
+
+    {
         constexpr std::uint64_t syscallCode =
             base + 0x50000ull;
         constexpr std::uint64_t syscallStack =
@@ -272,6 +352,7 @@ int main() {
                 syscallTraps);
 
         assert(syscallResult.handledTrapCount == 0);
+        assert(syscallResult.handledSyscallCount == 0);
         assert(syscallResult.interceptedSyscall);
         assert(syscallResult.syscallNumber == 0x1234);
         assert(
