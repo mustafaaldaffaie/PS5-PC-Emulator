@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <vector>
 
 #include <ps5emu/memory/GuestMemory.hpp>
@@ -39,6 +40,16 @@ public:
 
     [[nodiscard]] const std::vector<NativeImageMapping>&
     Mappings() const noexcept;
+
+    // Adds a new fixed-address native mapping after initial materialization.
+    // The guest address must satisfy the host allocation granularity. The
+    // mapping is committed only after allocation, initialization, and final
+    // protection all succeed.
+    void AddMapping(
+        std::uint64_t guestAddress,
+        std::size_t size,
+        memory::Protection protection,
+        std::span<const std::byte> initialData = {});
 
 private:
     friend class NativeImageMaterializer;

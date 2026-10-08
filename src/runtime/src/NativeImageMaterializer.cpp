@@ -187,6 +187,82 @@ NativeImage::Mappings() const noexcept {
     return mappings_;
 }
 
+void NativeImage::AddMapping(
+    std::uint64_t guestAddress,
+    std::size_t size,
+    memory::Protection protection,
+    std::span<const std::byte> initialData) {
+    if (size == 0) {
+        throw std::invalid_argument(
+            "Dynamic native mapping size cannot be zero");
+    }
+
+    if (initialData.size() > size) {
+        throw std::invalid_argument(
+            "Dynamic native mapping initializer exceeds the mapping size");
+    }
+
+    if (guestAddress >
+        std::numeric_limits<std::uintptr_t>::max()) {
+        throw std::overflow_error(
+            "Dynamic guest mapping address does not fit the host pointer width");
+    }
+
+    const auto granularity =
+        NativeMemoryRegion::AllocationGranularity();
+
+    if (guestAddress %
+            static_cast<std::uint64_t>(granularity) !=
+        0) {
+        throw std::invalid_argument(
+            "Dynamic guest mapping address is not allocation aligned");
+    }
+
+    const auto end =
+        CheckedEnd(
+            guestAddress,
+            size,
+            "Dynamic guest mapping address range overflows");
+
+    for (const auto& mapping : mappings_) {
+        const auto mappingEnd =
+            CheckedEnd(
+                mapping.guestAddress,
+                mapping.size,
+                "Existing native mapping address range overflows");
+
+        if (guestAddress < mappingEnd &&
+            mapping.guestAddress < end) {
+            throw std::runtime_error(
+                "Dynamic guest mapping overlaps an existing native mapping");
+        }
+    }
+
+    mappings_.reserve(mappings_.size() + 1);
+    reservations_.reserve(reservations_.size() + 1);
+
+    auto region =
+        NativeMemoryRegion::AllocateAt(
+            static_cast<std::uintptr_t>(guestAddress),
+            size);
+
+    if (!initialData.empty()) {
+        region.Write(0, initialData);
+    }
+
+    region.Protect(protection);
+
+    mappings_.push_back(
+        NativeImageMapping{
+            .guestAddress = guestAddress,
+            .size = size,
+            .protection = protection,
+        });
+
+    reservations_.push_back(
+        std::move(region));
+}
+
 NativeImage NativeImageMaterializer::Materialize(
     const memory::GuestMemory& memory) {
     const auto pageSize =
