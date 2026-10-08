@@ -38,7 +38,8 @@ public:
         NativeImage& nativeImage,
         const hle::HleRegistry& registry,
         const HleThunkTable& thunks,
-        std::span<const NativeSyscallTrap> syscallTraps = {});
+        std::span<const NativeSyscallTrap> syscallTraps = {},
+        hle::GuestThreadAccess* threads = nullptr);
 
 private:
     NativeLeafExecutor executor_;
