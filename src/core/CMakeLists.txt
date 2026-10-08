@@ -31,6 +31,12 @@ if(PS5EMU_BUILD_TESTS)
     target_link_libraries(ps5emu_dynamic_metadata_tests PRIVATE ps5emu_core ps5emu_test_options)
     add_test(NAME dynamic_metadata COMMAND ps5emu_dynamic_metadata_tests)
 
+    add_executable(ps5emu_tls_segment_tests
+        tests/TlsSegmentTests.cpp
+    )
+    target_link_libraries(ps5emu_tls_segment_tests PRIVATE ps5emu_core ps5emu_test_options)
+    add_test(NAME tls_segment COMMAND ps5emu_tls_segment_tests)
+
     add_executable(ps5emu_sce_dynamic_tables_tests
         tests/SceDynamicTablesTests.cpp
     )
