@@ -38,7 +38,7 @@ static_assert(
     std::atomic<TrapState*>::is_always_lock_free,
     "Native trap capture requires lock-free pointer atomics");
 
-thread_local std::atomic<TrapState*> g_activeTrap{nullptr};
+std::atomic<TrapState*> g_activeTrap{nullptr};
 
 std::mutex g_installMutex;
 std::size_t g_installUsers = 0;
@@ -378,7 +378,7 @@ NativeHleTrapBridge::Scope::Scope(
         state_ = nullptr;
 
         throw std::runtime_error(
-            "This thread already has an armed native HLE trap");
+            "A native HLE trap is already armed in this process");
     }
 }
 
