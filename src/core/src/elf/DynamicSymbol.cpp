@@ -24,6 +24,19 @@ struct Elf64Symbol {
 
 static_assert(sizeof(Elf64Symbol) == kElf64SymbolSize);
 
+DynamicTableReference AdvanceReference(
+    DynamicTableReference reference,
+    std::uint64_t offset) {
+    if (reference.value >
+        std::numeric_limits<std::uint64_t>::max() - offset) {
+        throw std::runtime_error(
+            "ELF dynamic table reference overflows");
+    }
+
+    reference.value += offset;
+    return reference;
+}
+
 } // namespace
 
 bool DynamicSymbol::IsUndefined() const noexcept {
@@ -43,11 +56,11 @@ DynamicSymbol DynamicSymbolTable::Read(
     const Image& image,
     const DynamicMetadata& metadata,
     std::uint32_t symbolIndex) {
-    if (!metadata.symbolTableAddress.has_value()) {
+    if (!metadata.symbolTable.has_value()) {
         throw std::runtime_error("ELF dynamic symbol table is missing");
     }
 
-    if (!metadata.stringTableAddress.has_value() ||
+    if (!metadata.stringTable.has_value() ||
         metadata.stringTableSize == 0) {
         throw std::runtime_error(
             "ELF dynamic string table is required for symbols");
@@ -65,17 +78,21 @@ DynamicSymbol DynamicSymbolTable::Read(
     }
 
     const auto byteOffset = index * kElf64SymbolSize;
-    if (*metadata.symbolTableAddress >
-        std::numeric_limits<std::uint64_t>::max() - byteOffset) {
-        throw std::runtime_error("ELF dynamic symbol address overflows");
+
+    if (metadata.symbolTableSize != 0 &&
+        (byteOffset > metadata.symbolTableSize ||
+         kElf64SymbolSize >
+             metadata.symbolTableSize - byteOffset)) {
+        throw std::runtime_error(
+            "ELF dynamic symbol index exceeds the symbol table");
     }
 
-    const auto symbolAddress =
-        *metadata.symbolTableAddress + byteOffset;
+    const auto symbolReference =
+        AdvanceReference(*metadata.symbolTable, byteOffset);
 
     const ElfFileView view(bytes, image);
     const auto range =
-        view.ResolveRange(symbolAddress, kElf64SymbolSize);
+        view.ResolveRange(symbolReference, kElf64SymbolSize);
 
     Elf64Symbol symbol{};
     std::memcpy(&symbol, range.data(), sizeof(symbol));
@@ -83,7 +100,7 @@ DynamicSymbol DynamicSymbolTable::Read(
     return DynamicSymbol{
         .index = symbolIndex,
         .name = view.ReadString(
-            *metadata.stringTableAddress,
+            *metadata.stringTable,
             metadata.stringTableSize,
             symbol.name),
         .info = symbol.info,

@@ -19,6 +19,7 @@ constexpr std::uint8_t kElfCurrentVersion = 1;
 constexpr std::uint16_t kMachineX86_64 = 62;
 constexpr std::uint32_t kProgramTypeLoad = 1;
 constexpr std::uint32_t kProgramTypeDynamic = 2;
+constexpr std::uint32_t kProgramTypeSceDynamicData = 0x61000000;
 
 template <typename T>
 T ReadObject(std::span<const std::byte> bytes, std::size_t offset) {
@@ -169,6 +170,21 @@ Image Elf64::Parse(std::span<const std::byte> bytes) {
                 "ELF dynamic segment extends past end of file");
 
             image.dynamicSegment = ToSegment(programHeader);
+            continue;
+        }
+
+        if (programHeader.type == kProgramTypeSceDynamicData) {
+            if (image.sceDynamicDataSegment.has_value()) {
+                throw std::runtime_error(
+                    "ELF contains more than one SCE dynamic data segment");
+            }
+
+            ValidateFileRange(
+                bytes,
+                programHeader,
+                "ELF SCE dynamic data segment extends past end of file");
+
+            image.sceDynamicDataSegment = ToSegment(programHeader);
         }
     }
 

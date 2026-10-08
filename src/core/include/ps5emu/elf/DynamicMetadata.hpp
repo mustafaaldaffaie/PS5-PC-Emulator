@@ -11,16 +11,27 @@
 
 namespace ps5emu::elf {
 
+enum class DynamicReferenceKind : std::uint8_t {
+    VirtualAddress,
+    SceDynamicDataOffset
+};
+
+struct DynamicTableReference {
+    std::uint64_t value = 0;
+    DynamicReferenceKind kind = DynamicReferenceKind::VirtualAddress;
+};
+
 struct DynamicMetadata {
     std::vector<std::string> neededLibraries;
-    std::optional<std::uint64_t> stringTableAddress;
+    std::optional<DynamicTableReference> stringTable;
     std::uint64_t stringTableSize = 0;
-    std::optional<std::uint64_t> symbolTableAddress;
+    std::optional<DynamicTableReference> symbolTable;
+    std::uint64_t symbolTableSize = 0;
     std::uint64_t symbolEntrySize = 0;
-    std::optional<std::uint64_t> relaAddress;
+    std::optional<DynamicTableReference> relaTable;
     std::uint64_t relaSize = 0;
     std::uint64_t relaEntrySize = 0;
-    std::optional<std::uint64_t> jumpRelocationAddress;
+    std::optional<DynamicTableReference> jumpRelocationTable;
     std::uint64_t jumpRelocationSize = 0;
     std::optional<std::uint64_t> pltRelocationType;
 };

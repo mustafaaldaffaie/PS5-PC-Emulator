@@ -24,7 +24,7 @@ static_assert(sizeof(Elf64Rela) == kElf64RelaSize);
 
 void ParseRange(std::vector<Relocation>& output,
                 const ElfFileView& view,
-                std::uint64_t address,
+                const DynamicTableReference& reference,
                 std::uint64_t byteSize,
                 bool procedureLinkage) {
     if (byteSize == 0) {
@@ -42,7 +42,7 @@ void ParseRange(std::vector<Relocation>& output,
             "ELF RELA table size is not entry-aligned");
     }
 
-    const auto range = view.ResolveRange(address, hostSize);
+    const auto range = view.ResolveRange(reference, hostSize);
 
     for (std::size_t offset = 0;
          offset < range.size();
@@ -72,9 +72,9 @@ std::vector<Relocation> RelocationTable::Parse(
     const ElfFileView view(bytes, image);
 
     if (metadata.relaSize != 0) {
-        if (!metadata.relaAddress.has_value()) {
+        if (!metadata.relaTable.has_value()) {
             throw std::runtime_error(
-                "ELF DT_RELASZ is present without DT_RELA");
+                "ELF DT_RELASZ is present without a RELA table");
         }
 
         if (metadata.relaEntrySize != kElf64RelaSize) {
@@ -85,15 +85,15 @@ std::vector<Relocation> RelocationTable::Parse(
         ParseRange(
             relocations,
             view,
-            *metadata.relaAddress,
+            *metadata.relaTable,
             metadata.relaSize,
             false);
     }
 
     if (metadata.jumpRelocationSize != 0) {
-        if (!metadata.jumpRelocationAddress.has_value()) {
+        if (!metadata.jumpRelocationTable.has_value()) {
             throw std::runtime_error(
-                "ELF DT_PLTRELSZ is present without DT_JMPREL");
+                "ELF DT_PLTRELSZ is present without a PLT relocation table");
         }
 
         if (!metadata.pltRelocationType.has_value() ||
@@ -110,7 +110,7 @@ std::vector<Relocation> RelocationTable::Parse(
         ParseRange(
             relocations,
             view,
-            *metadata.jumpRelocationAddress,
+            *metadata.jumpRelocationTable,
             metadata.jumpRelocationSize,
             true);
     }

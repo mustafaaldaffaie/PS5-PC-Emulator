@@ -29,6 +29,12 @@ if(PS5EMU_BUILD_TESTS)
     target_link_libraries(ps5emu_dynamic_metadata_tests PRIVATE ps5emu_core)
     add_test(NAME dynamic_metadata COMMAND ps5emu_dynamic_metadata_tests)
 
+    add_executable(ps5emu_sce_dynamic_tables_tests
+        tests/SceDynamicTablesTests.cpp
+    )
+    target_link_libraries(ps5emu_sce_dynamic_tables_tests PRIVATE ps5emu_core)
+    add_test(NAME sce_dynamic_tables COMMAND ps5emu_sce_dynamic_tables_tests)
+
     add_executable(ps5emu_linking_metadata_tests
         tests/LinkingMetadataTests.cpp
     )
