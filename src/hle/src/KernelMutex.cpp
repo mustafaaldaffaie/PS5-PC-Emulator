@@ -799,6 +799,121 @@ void CondWait(HleCallFrame& frame,
             : kSceOk;
 }
 
+
+struct GuestTimespec {
+    std::int64_t seconds = 0;
+    std::int64_t nanoseconds = 0;
+};
+
+bool ReadTimespec(HleCallFrame& frame,
+                  std::uint64_t address,
+                  GuestTimespec& value) {
+    if (address == 0 || frame.memory == nullptr) {
+        return false;
+    }
+
+    std::array<std::byte, sizeof(value)> bytes{};
+    try {
+        frame.memory->Read(address, bytes);
+    } catch (const std::exception&) {
+        return false;
+    }
+
+    std::memcpy(&value, bytes.data(), sizeof(value));
+    return true;
+}
+
+bool IsMonotonicClock(std::int32_t clockId) noexcept {
+    switch (clockId) {
+    case 4:
+    case 5:
+    case 7:
+    case 8:
+    case 11:
+    case 12:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool IsRealtimeClock(std::int32_t clockId) noexcept {
+    switch (clockId) {
+    case 0:
+    case 9:
+    case 10:
+    case 13:
+        return true;
+    default:
+        return false;
+    }
+}
+
+std::optional<std::uint64_t> AbsoluteTimeoutMicroseconds(
+    std::int32_t clockId,
+    const GuestTimespec& absolute) {
+    if (absolute.seconds < 0 ||
+        absolute.nanoseconds < 0 ||
+        absolute.nanoseconds >= 1000000000ll) {
+        return std::nullopt;
+    }
+
+    const auto seconds =
+        static_cast<std::uint64_t>(absolute.seconds);
+    const auto nanoseconds =
+        static_cast<std::uint64_t>(absolute.nanoseconds);
+
+    if (seconds >
+        std::numeric_limits<std::uint64_t>::max() /
+            1000000000ull) {
+        return std::nullopt;
+    }
+
+    const auto base =
+        seconds * 1000000000ull;
+
+    if (base >
+        std::numeric_limits<std::uint64_t>::max() -
+            nanoseconds) {
+        return std::nullopt;
+    }
+
+    const auto target = base + nanoseconds;
+
+    std::uint64_t now = 0;
+
+    if (IsMonotonicClock(clockId)) {
+        const auto value =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now()
+                    .time_since_epoch());
+        if (value.count() < 0) {
+            now = 0;
+        } else {
+            now = static_cast<std::uint64_t>(value.count());
+        }
+    } else if (IsRealtimeClock(clockId)) {
+        const auto value =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::system_clock::now()
+                    .time_since_epoch());
+        if (value.count() < 0) {
+            return std::nullopt;
+        }
+        now = static_cast<std::uint64_t>(value.count());
+    } else {
+        return std::nullopt;
+    }
+
+    if (target <= now) {
+        return 0;
+    }
+
+    const auto remaining = target - now;
+    return remaining / 1000ull +
+        (remaining % 1000ull != 0 ? 1ull : 0ull);
+}
+
 std::uint64_t ToPosixError(std::uint64_t value) {
     if (value == 0) {
         return 0;
@@ -809,6 +924,48 @@ std::uint64_t ToPosixError(std::uint64_t value) {
     }
 
     return value;
+}
+
+
+void PosixCondTimedwait(HleCallFrame& frame,
+                        MutexState& state) {
+    const auto condition =
+        ResolveCondition(
+            frame,
+            state,
+            frame.arguments[0],
+            true);
+
+    if (!condition) {
+        frame.returnValue = 22;
+        return;
+    }
+
+    GuestTimespec absolute;
+    if (!ReadTimespec(
+            frame,
+            frame.arguments[2],
+            absolute)) {
+        frame.returnValue = 14;
+        return;
+    }
+
+    const auto timeout =
+        AbsoluteTimeoutMicroseconds(
+            condition->clockId,
+            absolute);
+
+    if (!timeout.has_value()) {
+        frame.returnValue = 22;
+        return;
+    }
+
+    const auto saved = frame.arguments[2];
+    frame.arguments[2] = *timeout;
+    CondWait(frame, state, true);
+    frame.arguments[2] = saved;
+    frame.returnValue =
+        ToPosixError(frame.returnValue);
 }
 
 template <typename Function>
@@ -943,6 +1100,68 @@ void KernelMutex::Register(
         "scePthreadCondTimedwait",
         [state](HleCallFrame& frame) {
             CondWait(frame, *state, true);
+        });
+
+
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_condattr_init",
+        [state](HleCallFrame& frame) {
+            InvokePosix(frame, *state, CondAttrInit);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_condattr_destroy",
+        [state](HleCallFrame& frame) {
+            InvokePosix(frame, *state, CondAttrDestroy);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_condattr_setclock",
+        [state](HleCallFrame& frame) {
+            InvokePosix(frame, *state, CondAttrSetClock);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_cond_init",
+        [state](HleCallFrame& frame) {
+            InvokePosix(frame, *state, CondInit);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_cond_destroy",
+        [state](HleCallFrame& frame) {
+            InvokePosix(frame, *state, CondDestroy);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_cond_signal",
+        [state](HleCallFrame& frame) {
+            CondSignal(frame, *state, false);
+            frame.returnValue =
+                ToPosixError(frame.returnValue);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_cond_broadcast",
+        [state](HleCallFrame& frame) {
+            CondSignal(frame, *state, true);
+            frame.returnValue =
+                ToPosixError(frame.returnValue);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_cond_wait",
+        [state](HleCallFrame& frame) {
+            CondWait(frame, *state, false);
+            frame.returnValue =
+                ToPosixError(frame.returnValue);
+        });
+    registry.RegisterSymbol(
+        moduleName,
+        "pthread_cond_timedwait",
+        [state](HleCallFrame& frame) {
+            PosixCondTimedwait(frame, *state);
         });
 
     registry.RegisterSymbol(

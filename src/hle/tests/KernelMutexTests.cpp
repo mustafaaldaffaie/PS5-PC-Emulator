@@ -121,7 +121,7 @@ int main() {
         registry,
         "libkernel");
 
-    assert(registry.Size() == 27);
+    assert(registry.Size() == 36);
 
     TestMemory memory(256);
     constexpr std::uint64_t attr = 32;
@@ -461,6 +461,83 @@ int main() {
             memory,
             "scePthreadCondattrDestroy",
             condAttr) == ok);
+
+
+    constexpr std::uint64_t posixCond = 192;
+    constexpr std::uint64_t absoluteTime = 208;
+
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_cond_init",
+            posixCond,
+            0) == 0);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_mutex_init",
+            posixMutex,
+            0) == 0);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_mutex_lock",
+            posixMutex) == 0);
+
+    memory.StoreU64(absoluteTime, 0);
+    memory.StoreU64(absoluteTime + 8, 0);
+
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_cond_timedwait",
+            posixCond,
+            posixMutex,
+            absoluteTime) == 60);
+
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_cond_signal",
+            posixCond) == 0);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_cond_broadcast",
+            posixCond) == 0);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_mutex_unlock",
+            posixMutex) == 0);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_mutex_destroy",
+            posixMutex) == 0);
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_cond_destroy",
+            posixCond) == 0);
+
+    assert(
+        Invoke(
+            registry,
+            memory,
+            "pthread_cond_timedwait",
+            posixCond,
+            posixMutex,
+            absoluteTime) == 22);
 
     assert(
         Invoke(
