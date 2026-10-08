@@ -18,6 +18,15 @@ SysvGuestContext NativeContextAdapter::FromNative(
         .rax = nativeContext.Rax,
         .rip = nativeContext.Rip,
         .fsBase = fsBase,
+        .rbx = nativeContext.Rbx,
+        .rbp = nativeContext.Rbp,
+        .r10 = nativeContext.R10,
+        .r11 = nativeContext.R11,
+        .r12 = nativeContext.R12,
+        .r13 = nativeContext.R13,
+        .r14 = nativeContext.R14,
+        .r15 = nativeContext.R15,
+        .rflags = nativeContext.EFlags,
     };
 }
 
@@ -33,6 +42,17 @@ void NativeContextAdapter::ToNative(
     nativeContext.Rsp = guestContext.rsp;
     nativeContext.Rax = guestContext.rax;
     nativeContext.Rip = guestContext.rip;
+    nativeContext.Rbx = guestContext.rbx;
+    nativeContext.Rbp = guestContext.rbp;
+    nativeContext.R10 = guestContext.r10;
+    nativeContext.R11 = guestContext.r11;
+    nativeContext.R12 = guestContext.r12;
+    nativeContext.R13 = guestContext.r13;
+    nativeContext.R14 = guestContext.r14;
+    nativeContext.R15 = guestContext.r15;
+    nativeContext.EFlags =
+        static_cast<DWORD>(
+            guestContext.rflags);
 }
 
 #elif defined(__linux__)
@@ -53,6 +73,15 @@ SysvGuestContext NativeContextAdapter::FromNative(
         .rax = static_cast<std::uint64_t>(registers[REG_RAX]),
         .rip = static_cast<std::uint64_t>(registers[REG_RIP]),
         .fsBase = fsBase,
+        .rbx = static_cast<std::uint64_t>(registers[REG_RBX]),
+        .rbp = static_cast<std::uint64_t>(registers[REG_RBP]),
+        .r10 = static_cast<std::uint64_t>(registers[REG_R10]),
+        .r11 = static_cast<std::uint64_t>(registers[REG_R11]),
+        .r12 = static_cast<std::uint64_t>(registers[REG_R12]),
+        .r13 = static_cast<std::uint64_t>(registers[REG_R13]),
+        .r14 = static_cast<std::uint64_t>(registers[REG_R14]),
+        .r15 = static_cast<std::uint64_t>(registers[REG_R15]),
+        .rflags = static_cast<std::uint64_t>(registers[REG_EFL]),
     };
 }
 
@@ -70,6 +99,15 @@ void NativeContextAdapter::ToNative(
     registers[REG_RSP] = static_cast<greg_t>(guestContext.rsp);
     registers[REG_RAX] = static_cast<greg_t>(guestContext.rax);
     registers[REG_RIP] = static_cast<greg_t>(guestContext.rip);
+    registers[REG_RBX] = static_cast<greg_t>(guestContext.rbx);
+    registers[REG_RBP] = static_cast<greg_t>(guestContext.rbp);
+    registers[REG_R10] = static_cast<greg_t>(guestContext.r10);
+    registers[REG_R11] = static_cast<greg_t>(guestContext.r11);
+    registers[REG_R12] = static_cast<greg_t>(guestContext.r12);
+    registers[REG_R13] = static_cast<greg_t>(guestContext.r13);
+    registers[REG_R14] = static_cast<greg_t>(guestContext.r14);
+    registers[REG_R15] = static_cast<greg_t>(guestContext.r15);
+    registers[REG_EFL] = static_cast<greg_t>(guestContext.rflags);
 }
 
 #endif
