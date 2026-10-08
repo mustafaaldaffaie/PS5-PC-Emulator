@@ -1,6 +1,7 @@
 add_library(ps5emu_runtime STATIC
     src/ExecutableLinker.cpp
     src/GuestCallDispatcher.cpp
+    src/GuestExecutionBuilder.cpp
     src/GuestThreadMemory.cpp
     src/HleThunkTable.cpp
     src/HleTrapHandler.cpp
@@ -63,6 +64,13 @@ if(PS5EMU_BUILD_TESTS)
     target_link_libraries(ps5emu_guest_thread_memory_tests
         PRIVATE ps5emu_runtime ps5emu_test_options)
     add_test(NAME guest_thread_memory COMMAND ps5emu_guest_thread_memory_tests)
+
+    add_executable(ps5emu_guest_execution_builder_tests
+        tests/GuestExecutionBuilderTests.cpp
+    )
+    target_link_libraries(ps5emu_guest_execution_builder_tests
+        PRIVATE ps5emu_runtime ps5emu_test_options)
+    add_test(NAME guest_execution_builder COMMAND ps5emu_guest_execution_builder_tests)
 
     add_executable(ps5emu_hle_trap_handler_tests
         tests/HleTrapHandlerTests.cpp
