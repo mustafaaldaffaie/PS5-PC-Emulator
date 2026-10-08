@@ -33,7 +33,8 @@
 - [ ] NID name database and forward hashing
 - [x] HLE service registry foundation
 - [x] Synthetic guest thunk allocation and relocation binding
-- [ ] Guest-call ABI dispatch
+- [x] Integer/pointer SysV guest-call ABI dispatch
+- [ ] Floating-point and aggregate ABI dispatch
 - [ ] Threading primitives
 - [ ] Time and synchronization
 - [ ] Filesystem
@@ -43,7 +44,7 @@
 ## Phase 4 - Native execution
 
 - [ ] Guest stack and TLS
-- [ ] Host-call trampolines
+- [ ] Execution loop and thunk interception
 - [ ] Exception handling
 - [ ] Syscall interception strategy
 - [ ] AMD-only instruction handling

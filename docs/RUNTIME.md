@@ -27,16 +27,32 @@ services. Identity-equivalent services reuse one slot. The default arena uses
 16-byte slots and is configurable by base address, slot size, and capacity.
 
 The arena is mapped read/execute and initialized with x86 INT3 bytes. These
-bytes are diagnostic trap placeholders, not executable HLE implementations.
-A future guest execution engine must intercept thunk addresses, marshal the
-guest ABI into HleCallFrame, dispatch through HleRegistry, and write return
-state back to the guest.
+bytes are diagnostic trap placeholders, not native HLE implementations.
 
 SceExecutablePreparer combines SCE identity resolution with ExecutableLinker.
 Resolved imports receive thunk addresses that can be written by normal ELF
 relocations. Guest memory and thunk-table state are staged and committed
 together. Missing required imports, relocation failures, or thunk-arena
 collisions leave both caller-owned objects unchanged.
+
+## x86-64 HLE call dispatch
+
+X64HleDispatcher provides the first ABI bridge for calls that arrive at a
+synthetic thunk. It handles integer and pointer arguments under the SysV AMD64
+calling convention:
+
+- arguments 1-6 are read from RDI, RSI, RDX, RCX, R8, and R9;
+- arguments 7-8 are read from the guest stack after the return address;
+- the HLE return value is written to RAX;
+- the guest return address is popped into RIP and RSP advances by eight bytes.
+
+Dispatch is staged so register state is not modified when stack reads fail or
+when the thunk references a service that is no longer registered. Floating
+point, vector, aggregate, variadic, and exception ABI behavior is not
+implemented yet.
+
+This dispatcher is runtime plumbing only. The project still needs an execution
+engine that reaches a thunk, invokes this bridge, and resumes guest code.
 
 ## Single-image linking
 
