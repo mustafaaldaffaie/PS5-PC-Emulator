@@ -66,6 +66,21 @@ public:
     }
 
     template <typename T>
+    void Set(std::size_t offset,
+             const T& value) {
+        if (offset > bytes_.size() ||
+            sizeof(T) > bytes_.size() - offset) {
+            throw std::out_of_range(
+                "Test value write is out of range");
+        }
+
+        std::memcpy(
+            bytes_.data() + offset,
+            &value,
+            sizeof(value));
+    }
+
+    template <typename T>
     T Value(std::size_t offset) const {
         T value{};
         std::memcpy(
@@ -201,6 +216,92 @@ int main() {
             assert(value.nanoseconds >= 0);
             assert(value.nanoseconds < 1000000000ll);
         }
+    }
+
+    {
+        TestMemory memory(128);
+        SysvGuestContext context;
+        context.rax = 234;
+        context.rdi = 4;
+        context.rsi = 48;
+        context.rflags = 0x203;
+
+        const auto result =
+            dispatcher.Dispatch(
+                context,
+                0x425000,
+                &memory);
+
+        assert(result.handled);
+        assert(result.syscallNumber == 234);
+        assert(context.rax == 0);
+        assert((context.rflags & 1u) == 0);
+
+        const auto resolution =
+            memory.Value<GuestTimespec>(48);
+        assert(resolution.seconds >= 0);
+        assert(resolution.nanoseconds >= 0);
+        assert(resolution.nanoseconds < 1000000000ll);
+        assert(
+            resolution.seconds != 0 ||
+            resolution.nanoseconds != 0);
+    }
+
+    {
+        TestMemory memory(128);
+        memory.Set(
+            16,
+            GuestTimespec{
+                .seconds = 0,
+                .nanoseconds = 0,
+            });
+
+        SysvGuestContext context;
+        context.rax = 240;
+        context.rdi = 16;
+        context.rsi = 48;
+        context.rflags = 0x203;
+
+        const auto result =
+            dispatcher.Dispatch(
+                context,
+                0x426000,
+                &memory);
+
+        assert(result.handled);
+        assert(result.syscallNumber == 240);
+        assert(context.rax == 0);
+        assert((context.rflags & 1u) == 0);
+
+        const auto remaining =
+            memory.Value<GuestTimespec>(48);
+        assert(remaining.seconds == 0);
+        assert(remaining.nanoseconds == 0);
+    }
+
+    {
+        TestMemory memory(128);
+        memory.Set(
+            16,
+            GuestTimespec{
+                .seconds = 0,
+                .nanoseconds = 1000000000ll,
+            });
+
+        SysvGuestContext context;
+        context.rax = 240;
+        context.rdi = 16;
+        context.rflags = 0x202;
+
+        const auto result =
+            dispatcher.Dispatch(
+                context,
+                0x427000,
+                &memory);
+
+        assert(result.handled);
+        assert(context.rax == 22);
+        assert((context.rflags & 1u) != 0);
     }
 
     {
