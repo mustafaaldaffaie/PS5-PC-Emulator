@@ -75,9 +75,9 @@ int main() {
 
     assert(file.good());
 
-    const std::string written(
+    const std::string written{
         std::istreambuf_iterator<char>(file),
-        std::istreambuf_iterator<char>());
+        std::istreambuf_iterator<char>{}};
 
     assert(written == report);
 
