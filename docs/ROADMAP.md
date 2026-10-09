@@ -61,7 +61,7 @@
 
 - [x] Vulkan runtime loader
 - [ ] Vulkan device layer
-- [ ] Command-stream abstraction
+- [x] Command-stream abstraction
 - [ ] PM4 research
 - [ ] Shader decoder
 - [ ] Shader IR
