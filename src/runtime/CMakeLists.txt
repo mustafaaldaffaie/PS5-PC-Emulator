@@ -19,6 +19,7 @@ add_library(ps5emu_runtime STATIC
     src/NativeSyscallDispatcher.cpp
     src/NativeSyscallInterceptor.cpp
     src/SceExecutablePreparer.cpp
+    src/SandboxFileSystem.cpp
     src/SceImportResolver.cpp
 )
 
@@ -46,6 +47,13 @@ if(PS5EMU_BUILD_TESTS)
     )
     target_link_libraries(ps5emu_import_resolver_tests PRIVATE ps5emu_runtime ps5emu_test_options)
     add_test(NAME import_resolver COMMAND ps5emu_import_resolver_tests)
+
+    add_executable(ps5emu_sandbox_filesystem_tests
+        tests/SandboxFileSystemTests.cpp
+    )
+    target_link_libraries(ps5emu_sandbox_filesystem_tests
+        PRIVATE ps5emu_runtime ps5emu_test_options)
+    add_test(NAME sandbox_filesystem COMMAND ps5emu_sandbox_filesystem_tests)
 
     add_executable(ps5emu_sce_import_resolver_tests
         tests/SceImportResolverTests.cpp
