@@ -109,7 +109,7 @@ std::size_t FindUnescapedTab(std::string_view value) {
 }
 
 std::string PathKey(const std::filesystem::path& path) {
-    return path.generic_u8string();
+    return path.generic_string();
 }
 
 } // namespace
@@ -306,7 +306,7 @@ GameLibrary GameLibrary::Load(
                     separator + 1));
 
         if (!library.Add(
-                std::filesystem::u8path(pathText),
+                std::filesystem::path(pathText),
                 displayName)) {
             throw std::runtime_error(
                 "Game library manifest contains duplicate entries");
@@ -363,11 +363,11 @@ GameLibrary::NormalizeExistingExecutable(
 std::string GameLibrary::DefaultDisplayName(
     const std::filesystem::path& executablePath) {
     auto name =
-        executablePath.stem().u8string();
+        executablePath.stem().string();
 
     if (name.empty()) {
         name =
-            executablePath.filename().u8string();
+            executablePath.filename().string();
     }
 
     if (name.empty()) {
