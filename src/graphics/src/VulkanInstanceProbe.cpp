@@ -1,92 +1,13 @@
 #include <ps5emu/graphics/VulkanInstanceProbe.hpp>
 
-#include <cstddef>
-#include <cstdint>
+#include "VulkanAbi.hpp"
 
 namespace ps5emu::graphics {
-namespace {
-
-#if defined(_WIN32)
-#define PS5EMU_VK_CALL __stdcall
-#else
-#define PS5EMU_VK_CALL
-#endif
-
-using VkFlags = std::uint32_t;
-using VkResult = std::int32_t;
-using VkStructureType = std::int32_t;
-
-struct VkInstance_T;
-struct VkPhysicalDevice_T;
-
-using VkInstance = VkInstance_T*;
-using VkPhysicalDevice = VkPhysicalDevice_T*;
-
-constexpr VkResult kVkSuccess = 0;
-constexpr VkResult kVkIncomplete = 5;
-constexpr VkStructureType kVkStructureTypeApplicationInfo = 0;
-constexpr VkStructureType kVkStructureTypeInstanceCreateInfo = 1;
-constexpr std::uint32_t kVkApiVersion10 = 1u << 22;
-
-struct VkApplicationInfo {
-    VkStructureType sType;
-    const void* pNext;
-    const char* pApplicationName;
-    std::uint32_t applicationVersion;
-    const char* pEngineName;
-    std::uint32_t engineVersion;
-    std::uint32_t apiVersion;
-};
-
-struct VkInstanceCreateInfo {
-    VkStructureType sType;
-    const void* pNext;
-    VkFlags flags;
-    const VkApplicationInfo* pApplicationInfo;
-    std::uint32_t enabledLayerCount;
-    const char* const* ppEnabledLayerNames;
-    std::uint32_t enabledExtensionCount;
-    const char* const* ppEnabledExtensionNames;
-};
-
-using PfnVkVoidFunction = void (PS5EMU_VK_CALL*)();
-
-using PfnVkGetInstanceProcAddr =
-    PfnVkVoidFunction (PS5EMU_VK_CALL*)(
-        VkInstance,
-        const char*);
-
-using PfnVkCreateInstance =
-    VkResult (PS5EMU_VK_CALL*)(
-        const VkInstanceCreateInfo*,
-        const void*,
-        VkInstance*);
-
-using PfnVkDestroyInstance =
-    void (PS5EMU_VK_CALL*)(
-        VkInstance,
-        const void*);
-
-using PfnVkEnumeratePhysicalDevices =
-    VkResult (PS5EMU_VK_CALL*)(
-        VkInstance,
-        std::uint32_t*,
-        VkPhysicalDevice*);
-
-template <typename Function>
-Function FunctionCast(void* pointer) noexcept {
-    return reinterpret_cast<Function>(pointer);
-}
-
-template <typename Function>
-Function FunctionCast(PfnVkVoidFunction pointer) noexcept {
-    return reinterpret_cast<Function>(pointer);
-}
-
-} // namespace
 
 VulkanProbeResult VulkanInstanceProbe::Probe(
     const VulkanRuntimeLoader& loader) noexcept {
+    using namespace vkabi;
+
     VulkanProbeResult result;
 
     if (!loader.IsLoaded()) {
@@ -118,17 +39,17 @@ VulkanProbeResult VulkanInstanceProbe::Probe(
     }
 
     const VkApplicationInfo applicationInfo{
-        .sType = kVkStructureTypeApplicationInfo,
+        .sType = kStructureTypeApplicationInfo,
         .pNext = nullptr,
         .pApplicationName = "PS5-PC-Emulator",
         .applicationVersion = 1,
         .pEngineName = "PS5-PC-Emulator",
         .engineVersion = 1,
-        .apiVersion = kVkApiVersion10,
+        .apiVersion = kApiVersion10,
     };
 
     const VkInstanceCreateInfo createInfo{
-        .sType = kVkStructureTypeInstanceCreateInfo,
+        .sType = kStructureTypeInstanceCreateInfo,
         .pNext = nullptr,
         .flags = 0,
         .pApplicationInfo = &applicationInfo,
@@ -147,7 +68,7 @@ VulkanProbeResult VulkanInstanceProbe::Probe(
 
     result.nativeResult = createResult;
 
-    if (createResult != kVkSuccess ||
+    if (createResult != kSuccess ||
         instance == nullptr) {
         result.status =
             VulkanProbeStatus::InstanceCreationFailed;
@@ -188,8 +109,8 @@ VulkanProbeResult VulkanInstanceProbe::Probe(
     result.nativeResult = enumerateResult;
     result.physicalDeviceCount = physicalDeviceCount;
 
-    if (enumerateResult != kVkSuccess &&
-        enumerateResult != kVkIncomplete) {
+    if (enumerateResult != kSuccess &&
+        enumerateResult != kIncomplete) {
         result.status =
             VulkanProbeStatus::PhysicalDeviceEnumerationFailed;
         return result;
