@@ -48,3 +48,20 @@ swapchain, memory, synchronization, and queue-submission work.
 All Vulkan ABI declarations used by this layer are public Vulkan ABI types and
 are kept in a private internal header so the project still builds without the
 Vulkan SDK.
+
+
+## PM4 command stream
+
+The command-stream layer currently performs Type-3 packet framing and strict
+bounds validation. It extracts opcode, flags, packet word range, and command
+buffer offset without assigning execution semantics to individual opcodes.
+
+Type-3 framing uses the public packet layout:
+
+- bits 31:30: packet type, required to be 3;
+- bits 29:16: encoded word count, with two header/base words added;
+- bits 15:8: opcode;
+- bits 7:0: packet flags.
+
+Opcode execution is intentionally a separate layer so packet validation can be
+tested independently from graphics state mutation and Vulkan translation.

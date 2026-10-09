@@ -1,4 +1,5 @@
 add_library(ps5emu_graphics STATIC
+    src/Pm4CommandStream.cpp
     src/VulkanDeviceProbe.cpp
     src/VulkanInstanceProbe.cpp
     src/VulkanRuntimeLoader.cpp
@@ -17,6 +18,19 @@ if(UNIX AND NOT APPLE)
 endif()
 
 if(PS5EMU_BUILD_TESTS)
+    add_executable(ps5emu_pm4_command_stream_tests
+        tests/Pm4CommandStreamTests.cpp
+    )
+    target_link_libraries(ps5emu_pm4_command_stream_tests
+        PRIVATE
+            ps5emu_graphics
+            ps5emu_test_options
+    )
+    add_test(
+        NAME pm4_command_stream
+        COMMAND ps5emu_pm4_command_stream_tests
+    )
+
     add_executable(ps5emu_vulkan_runtime_loader_tests
         tests/VulkanRuntimeLoaderTests.cpp
     )
