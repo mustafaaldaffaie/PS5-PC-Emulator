@@ -17,6 +17,7 @@ add_library(ps5emu_runtime STATIC
     src/NativeInstructionGuard.cpp
     src/NativeLeafExecutor.cpp
     src/NativeMemoryRegion.cpp
+    src/ModuleExportTable.cpp
     src/NativeSyscallDispatcher.cpp
     src/NativeSyscallInterceptor.cpp
     src/SceExecutablePreparer.cpp
@@ -48,6 +49,13 @@ if(PS5EMU_BUILD_TESTS)
     )
     target_link_libraries(ps5emu_import_resolver_tests PRIVATE ps5emu_runtime ps5emu_test_options)
     add_test(NAME import_resolver COMMAND ps5emu_import_resolver_tests)
+
+    add_executable(ps5emu_module_export_table_tests
+        tests/ModuleExportTableTests.cpp
+    )
+    target_link_libraries(ps5emu_module_export_table_tests
+        PRIVATE ps5emu_runtime ps5emu_test_options)
+    add_test(NAME module_export_table COMMAND ps5emu_module_export_table_tests)
 
     add_executable(ps5emu_sandbox_filesystem_tests
         tests/SandboxFileSystemTests.cpp
