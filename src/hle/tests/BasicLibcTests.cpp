@@ -107,7 +107,7 @@ int main() {
     ps5emu::hle::HleRegistry registry;
     ps5emu::hle::BasicLibc::Register(registry, "libc");
 
-    assert(registry.Size() == 13);
+    assert(registry.Size() == 18);
 
     TestMemory memory(128);
 
@@ -408,6 +408,144 @@ int main() {
             3) == 0);
         assert(memory.At(104) == std::byte{0});
         assert(memory.At(106) == std::byte{0});
+    }
+
+
+    {
+        const std::vector<std::byte> text{
+            std::byte{'a'},
+            std::byte{'b'},
+            std::byte{'c'},
+            std::byte{'b'},
+            std::byte{0},
+        };
+        memory.Write(0, text);
+
+        assert(Invoke(
+            registry,
+            "strchr",
+            memory,
+            0,
+            'b') == 1);
+        assert(Invoke(
+            registry,
+            "strrchr",
+            memory,
+            0,
+            'b') == 3);
+        assert(Invoke(
+            registry,
+            "strchr",
+            memory,
+            0,
+            0) == 4);
+        assert(Invoke(
+            registry,
+            "strchr",
+            memory,
+            0,
+            'z') == 0);
+    }
+
+    {
+        const std::vector<std::byte> haystack{
+            std::byte{'p'},
+            std::byte{'s'},
+            std::byte{'5'},
+            std::byte{'e'},
+            std::byte{'m'},
+            std::byte{'u'},
+            std::byte{0},
+        };
+        const std::vector<std::byte> needle{
+            std::byte{'5'},
+            std::byte{'e'},
+            std::byte{'m'},
+            std::byte{0},
+        };
+        const std::vector<std::byte> absent{
+            std::byte{'x'},
+            std::byte{0},
+        };
+        const std::vector<std::byte> empty{
+            std::byte{0},
+        };
+
+        memory.Write(108, haystack);
+        memory.Write(116, needle);
+        memory.Write(121, absent);
+        memory.Write(124, empty);
+
+        assert(Invoke(
+            registry,
+            "strstr",
+            memory,
+            108,
+            116) == 110);
+        assert(Invoke(
+            registry,
+            "strstr",
+            memory,
+            108,
+            121) == 0);
+        assert(Invoke(
+            registry,
+            "strstr",
+            memory,
+            108,
+            124) == 108);
+    }
+
+    {
+        const std::vector<std::byte> destination{
+            std::byte{'a'},
+            std::byte{'b'},
+            std::byte{0},
+        };
+        const std::vector<std::byte> source{
+            std::byte{'c'},
+            std::byte{'d'},
+            std::byte{'e'},
+            std::byte{0},
+        };
+        memory.Write(72, destination);
+        memory.Write(80, source);
+
+        assert(Invoke(
+            registry,
+            "strcat",
+            memory,
+            72,
+            80) == 72);
+        assert(memory.At(72) == std::byte{'a'});
+        assert(memory.At(76) == std::byte{'e'});
+        assert(memory.At(77) == std::byte{0});
+
+        const std::vector<std::byte> reset{
+            std::byte{'x'},
+            std::byte{0},
+        };
+        memory.Write(88, reset);
+
+        assert(Invoke(
+            registry,
+            "strncat",
+            memory,
+            88,
+            80,
+            2) == 88);
+        assert(memory.At(88) == std::byte{'x'});
+        assert(memory.At(89) == std::byte{'c'});
+        assert(memory.At(90) == std::byte{'d'});
+        assert(memory.At(91) == std::byte{0});
+
+        assert(Invoke(
+            registry,
+            "strncat",
+            memory,
+            88,
+            std::numeric_limits<std::uint64_t>::max(),
+            0) == 88);
     }
 
     {
