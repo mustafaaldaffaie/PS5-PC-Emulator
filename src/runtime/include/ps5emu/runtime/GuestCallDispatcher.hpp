@@ -45,7 +45,8 @@ public:
              hle::GuestMemoryAccess& memory,
              const hle::HleRegistry& registry,
              const HleThunkTable& thunks,
-             hle::GuestThreadAccess* threads = nullptr);
+             hle::GuestThreadAccess* threads = nullptr,
+             hle::GuestFileSystemAccess* files = nullptr);
 
     [[nodiscard]] static GuestCallDispatchResult
     Dispatch(std::uint64_t targetAddress,
@@ -53,7 +54,8 @@ public:
              memory::GuestMemory& memory,
              const hle::HleRegistry& registry,
              const HleThunkTable& thunks,
-             hle::GuestThreadAccess* threads = nullptr);
+             hle::GuestThreadAccess* threads = nullptr,
+             hle::GuestFileSystemAccess* files = nullptr);
 };
 
 } // namespace ps5emu::runtime

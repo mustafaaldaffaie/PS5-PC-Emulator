@@ -10,6 +10,31 @@
 
 namespace {
 
+class TestFiles final
+    : public ps5emu::hle::GuestFileSystemAccess {
+public:
+    ps5emu::hle::GuestFileResult Open(
+        std::string_view,
+        std::int32_t,
+        std::uint16_t) override { return {}; }
+
+    ps5emu::hle::GuestFileResult Close(
+        std::int32_t) override { return {}; }
+
+    ps5emu::hle::GuestFileResult Read(
+        std::int32_t,
+        std::span<std::byte>) override { return {}; }
+
+    ps5emu::hle::GuestFileResult Write(
+        std::int32_t,
+        std::span<const std::byte>) override { return {}; }
+
+    ps5emu::hle::GuestFileResult Seek(
+        std::int32_t,
+        std::int64_t,
+        std::int32_t) override { return {}; }
+};
+
 class TestThreads final
     : public ps5emu::hle::GuestThreadAccess {
 public:
@@ -64,6 +89,7 @@ int main() {
             assert(frame.memory != nullptr);
             assert(frame.threads != nullptr);
             assert(frame.threads->CurrentThreadHandle() == 0x7777);
+            assert(frame.files != nullptr);
 
             std::uint64_t sum = 0;
             for (const auto value : frame.arguments) {
@@ -120,6 +146,7 @@ int main() {
     };
 
     TestThreads threads;
+    TestFiles files;
 
     const auto result =
         GuestCallDispatcher::Dispatch(
@@ -128,7 +155,8 @@ int main() {
             memory,
             registry,
             thunks,
-            &threads);
+            &threads,
+            &files);
 
     assert(result.handled);
     assert(result.errorCode == -42);
@@ -177,7 +205,8 @@ int main() {
                     memory,
                     registry,
                     thunks,
-                    &threads));
+                    &threads,
+                    &files));
         }));
     }
 
