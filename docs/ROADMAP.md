@@ -60,7 +60,7 @@
 ## Phase 5 - Graphics
 
 - [x] Vulkan runtime loader
-- [ ] Vulkan device layer
+- [x] Vulkan device layer
 - [ ] Command-stream abstraction
 - [ ] PM4 research
 - [ ] Shader decoder

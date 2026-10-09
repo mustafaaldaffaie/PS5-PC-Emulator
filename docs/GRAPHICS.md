@@ -33,3 +33,18 @@ headers or development packages installed.
 The graphics layer must remain independent from proprietary console libraries.
 Guest GPU behavior is translated from observable executable and command-stream
 data into public Vulkan APIs.
+
+
+## Vulkan device baseline
+
+The device probe creates a Vulkan 1.0 instance, enumerates physical devices,
+finds the first queue family with graphics capability, and attempts to create
+a logical device with one graphics queue.
+
+The probe deliberately enables no optional extensions or device features yet.
+This keeps device bring-up deterministic and provides a stable base for later
+swapchain, memory, synchronization, and queue-submission work.
+
+All Vulkan ABI declarations used by this layer are public Vulkan ABI types and
+are kept in a private internal header so the project still builds without the
+Vulkan SDK.
