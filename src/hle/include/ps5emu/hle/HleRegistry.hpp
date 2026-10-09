@@ -8,6 +8,7 @@
 #include <string_view>
 #include <unordered_map>
 
+#include <ps5emu/hle/GuestFileSystemAccess.hpp>
 #include <ps5emu/hle/GuestMemoryAccess.hpp>
 #include <ps5emu/hle/GuestThreadAccess.hpp>
 
@@ -18,6 +19,7 @@ struct HleCallFrame {
     std::uint64_t returnValue = 0;
     std::int64_t errorCode = 0;
     GuestMemoryAccess* memory = nullptr;
+    GuestFileSystemAccess* files = nullptr;
     GuestThreadAccess* threads = nullptr;
 };
 
