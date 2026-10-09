@@ -24,13 +24,15 @@ public:
     HandleInt3(SysvGuestContext& context,
                hle::GuestMemoryAccess& memory,
                const hle::HleRegistry& registry,
-               const HleThunkTable& thunks);
+               const HleThunkTable& thunks,
+               hle::GuestThreadAccess* threads = nullptr);
 
     [[nodiscard]] static HleTrapResult
     HandleInt3(SysvGuestContext& context,
                memory::GuestMemory& memory,
                const hle::HleRegistry& registry,
-               const HleThunkTable& thunks);
+               const HleThunkTable& thunks,
+               hle::GuestThreadAccess* threads = nullptr);
 };
 
 } // namespace ps5emu::runtime

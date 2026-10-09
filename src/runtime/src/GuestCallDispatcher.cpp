@@ -40,7 +40,8 @@ std::uint64_t ReadU64(
 
 hle::HleCallFrame BuildCallFrame(
     const SysvGuestContext& context,
-    hle::GuestMemoryAccess& memory) {
+    hle::GuestMemoryAccess& memory,
+    hle::GuestThreadAccess* threads) {
     hle::HleCallFrame frame;
 
     frame.arguments[0] = context.rdi;
@@ -70,6 +71,7 @@ hle::HleCallFrame BuildCallFrame(
             memory,
             argument8Address);
     frame.memory = &memory;
+    frame.threads = threads;
 
     return frame;
 }
@@ -81,7 +83,8 @@ GuestCallDispatchResult GuestCallDispatcher::Dispatch(
     SysvGuestContext& context,
     hle::GuestMemoryAccess& memory,
     const hle::HleRegistry& registry,
-    const HleThunkTable& thunks) {
+    const HleThunkTable& thunks,
+    hle::GuestThreadAccess* threads) {
     if (thunks.FindByAddress(
             targetAddress) == nullptr) {
         return {};
@@ -90,7 +93,8 @@ GuestCallDispatchResult GuestCallDispatcher::Dispatch(
     auto frame =
         BuildCallFrame(
             context,
-            memory);
+            memory,
+            threads);
 
     if (!thunks.Dispatch(
             targetAddress,
@@ -113,7 +117,8 @@ GuestCallDispatchResult GuestCallDispatcher::Dispatch(
     SysvGuestContext& context,
     memory::GuestMemory& memory,
     const hle::HleRegistry& registry,
-    const HleThunkTable& thunks) {
+    const HleThunkTable& thunks,
+    hle::GuestThreadAccess* threads) {
     GuestMemoryAccessAdapter memoryAccess(
         memory);
 
@@ -122,7 +127,8 @@ GuestCallDispatchResult GuestCallDispatcher::Dispatch(
         context,
         memoryAccess,
         registry,
-        thunks);
+        thunks,
+        threads);
 }
 
 } // namespace ps5emu::runtime

@@ -44,14 +44,16 @@ public:
              SysvGuestContext& context,
              hle::GuestMemoryAccess& memory,
              const hle::HleRegistry& registry,
-             const HleThunkTable& thunks);
+             const HleThunkTable& thunks,
+             hle::GuestThreadAccess* threads = nullptr);
 
     [[nodiscard]] static GuestCallDispatchResult
     Dispatch(std::uint64_t targetAddress,
              SysvGuestContext& context,
              memory::GuestMemory& memory,
              const hle::HleRegistry& registry,
-             const HleThunkTable& thunks);
+             const HleThunkTable& thunks,
+             hle::GuestThreadAccess* threads = nullptr);
 };
 
 } // namespace ps5emu::runtime
