@@ -10,7 +10,7 @@
 - [x] Initial ELF64 parser
 - [x] Initial guest-memory abstraction
 - [x] Unit tests for ELF and memory
-- [ ] Structured logging
+- [x] Structured logging
 - [ ] Crash reporting
 
 ## Phase 2 - Executable loading
@@ -59,6 +59,7 @@
 
 ## Phase 5 - Graphics
 
+- [x] Vulkan runtime loader
 - [ ] Vulkan device layer
 - [ ] Command-stream abstraction
 - [ ] PM4 research
