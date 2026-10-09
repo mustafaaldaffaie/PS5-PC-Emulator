@@ -10,6 +10,7 @@ add_library(ps5emu_core STATIC
     src/elf/SceQualifiedSymbol.cpp
     src/loader/ExecutableImageLoader.cpp
     src/loader/RelocationApplier.cpp
+    src/logging/Logger.cpp
     src/memory/GuestMemory.cpp
 )
 
@@ -60,6 +61,12 @@ if(PS5EMU_BUILD_TESTS)
     )
     target_link_libraries(ps5emu_guest_memory_tests PRIVATE ps5emu_core ps5emu_test_options)
     add_test(NAME guest_memory COMMAND ps5emu_guest_memory_tests)
+
+    add_executable(ps5emu_logger_tests
+        tests/LoggerTests.cpp
+    )
+    target_link_libraries(ps5emu_logger_tests PRIVATE ps5emu_core ps5emu_test_options)
+    add_test(NAME logger COMMAND ps5emu_logger_tests)
 
     add_executable(ps5emu_executable_image_loader_tests
         tests/ExecutableImageLoaderTests.cpp
