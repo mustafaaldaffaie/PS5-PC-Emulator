@@ -1,4 +1,5 @@
 add_library(ps5emu_graphics STATIC
+    src/VulkanInstanceProbe.cpp
     src/VulkanRuntimeLoader.cpp
 )
 
@@ -26,5 +27,18 @@ if(PS5EMU_BUILD_TESTS)
     add_test(
         NAME vulkan_runtime_loader
         COMMAND ps5emu_vulkan_runtime_loader_tests
+    )
+
+    add_executable(ps5emu_vulkan_instance_probe_tests
+        tests/VulkanInstanceProbeTests.cpp
+    )
+    target_link_libraries(ps5emu_vulkan_instance_probe_tests
+        PRIVATE
+            ps5emu_graphics
+            ps5emu_test_options
+    )
+    add_test(
+        NAME vulkan_instance_probe
+        COMMAND ps5emu_vulkan_instance_probe_tests
     )
 endif()
