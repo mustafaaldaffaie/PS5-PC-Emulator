@@ -1,4 +1,5 @@
 #include <charconv>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string_view>
@@ -15,6 +16,7 @@
 #include <ps5emu/runtime/NativeExecutionBuilder.hpp>
 #include <ps5emu/runtime/NativeHleExecutor.hpp>
 #include <ps5emu/runtime/NativeGuestThreadRuntime.hpp>
+#include <ps5emu/runtime/SandboxFileSystem.hpp>
 #include <ps5emu/runtime/SceExecutablePreparer.hpp>
 
 namespace {
@@ -123,13 +125,26 @@ int RunNativeExecutable(
     const auto elfImage =
         ps5emu::elf::Elf64::Parse(bytes);
 
+    const auto executablePath =
+        std::filesystem::absolute(
+            std::filesystem::path(path));
+    const auto sandboxRoot =
+        executablePath.parent_path() /
+        ".ps5emu-sandbox" /
+        executablePath.stem();
+
+    ps5emu::runtime::SandboxFileSystem files(
+        sandboxRoot);
+
     ps5emu::runtime::NativeGuestThreadRuntime threads(
         bytes,
         elfImage,
         prepared.nativeImage,
         prepared.guest.registry,
         prepared.guest.thunks,
-        prepared.syscallTraps);
+        prepared.syscallTraps,
+        {},
+        &files);
 
     ps5emu::runtime::NativeHleExecutor executor;
     const auto result =
@@ -139,7 +154,8 @@ int RunNativeExecutable(
             prepared.guest.registry,
             prepared.guest.thunks,
             prepared.syscallTraps,
-            &threads);
+            &threads,
+            &files);
 
     if (result.interceptedSyscall) {
         std::cout << "Intercepted unsupported guest syscall "
@@ -153,6 +169,9 @@ int RunNativeExecutable(
     }
 
     std::cout << "Native guest returned.\n";
+    std::cout << "Sandbox root: "
+              << files.Root().string()
+              << '\n';
     std::cout << "Handled HLE traps: "
               << result.handledTrapCount
               << '\n';
