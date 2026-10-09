@@ -37,8 +37,8 @@
 - [x] HLE guest-memory access interface
 - [x] Thread identity/equality/yield baseline
 - [x] Mutex and mutex-attribute synchronization baseline
-- [ ] Thread creation/join and condition-variable primitives
-- [ ] Time and synchronization
+- [x] Thread creation/join and condition-variable primitives
+- [x] Time and synchronization baseline
 - [ ] Filesystem
 - [x] Basic libc memory bridge (memcpy/memmove/memset)
 - [ ] Additional libc coverage
