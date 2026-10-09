@@ -39,7 +39,7 @@
 - [x] Mutex and mutex-attribute synchronization baseline
 - [x] Thread creation/join and condition-variable primitives
 - [x] Time and synchronization baseline
-- [ ] Filesystem
+- [x] Sandboxed filesystem HLE and native runtime plumbing
 - [x] Basic libc memory bridge (memcpy/memmove/memset)
 - [ ] Additional libc coverage
 - [ ] Module loader
