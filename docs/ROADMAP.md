@@ -11,7 +11,7 @@
 - [x] Initial guest-memory abstraction
 - [x] Unit tests for ELF and memory
 - [x] Structured logging
-- [ ] Crash reporting
+- [x] Crash reporting
 
 ## Phase 2 - Executable loading
 

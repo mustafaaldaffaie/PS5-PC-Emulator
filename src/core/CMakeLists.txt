@@ -1,5 +1,6 @@
 add_library(ps5emu_core STATIC
     src/Core.cpp
+    src/crash/CrashReport.cpp
     src/elf/DynamicMetadata.cpp
     src/elf/DynamicSymbol.cpp
     src/elf/Elf64.cpp
@@ -25,6 +26,13 @@ if(PS5EMU_BUILD_TESTS)
     )
     target_link_libraries(ps5emu_elf64_tests PRIVATE ps5emu_core ps5emu_test_options)
     add_test(NAME elf64_parser COMMAND ps5emu_elf64_tests)
+
+    add_executable(ps5emu_crash_report_tests
+        tests/CrashReportTests.cpp
+    )
+    target_link_libraries(ps5emu_crash_report_tests
+        PRIVATE ps5emu_core ps5emu_test_options)
+    add_test(NAME crash_report COMMAND ps5emu_crash_report_tests)
 
     add_executable(ps5emu_dynamic_metadata_tests
         tests/DynamicMetadataTests.cpp
