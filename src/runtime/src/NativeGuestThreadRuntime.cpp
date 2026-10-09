@@ -73,7 +73,8 @@ NativeGuestThreadRuntime::NativeGuestThreadRuntime(
     const hle::HleRegistry& registry,
     const HleThunkTable& thunks,
     std::span<const NativeSyscallTrap> syscallTraps,
-    NativeGuestThreadRuntimeOptions options)
+    NativeGuestThreadRuntimeOptions options,
+    hle::GuestFileSystemAccess* files)
     : executableBytes_(
           executableBytes.begin(),
           executableBytes.end()),
@@ -84,7 +85,8 @@ NativeGuestThreadRuntime::NativeGuestThreadRuntime(
       syscallTraps_(
           syscallTraps.begin(),
           syscallTraps.end()),
-      options_(options) {
+      options_(options),
+      files_(files) {
     if (options_.workerStackSize < 16) {
         throw std::invalid_argument(
             "Worker guest stack size must be at least 16 bytes");
@@ -268,7 +270,8 @@ NativeGuestThreadRuntime::Create(
                                 registry_,
                                 thunks_,
                                 syscallTraps_,
-                                this);
+                                this,
+                                files_);
 
                         if (result.interceptedSyscall) {
                             record->executionError =
