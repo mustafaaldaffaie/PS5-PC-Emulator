@@ -54,10 +54,15 @@ void ModuleExportRegistry::Register(
         }
     }
 
-    exportCount_ += entry.exports.Size();
+    const auto addedExportCount =
+        entry.exports.Size();
+
     modules_.emplace(
         std::move(moduleName),
         std::move(entry));
+
+    exportCount_ +=
+        addedExportCount;
 }
 
 const ModuleExport*
