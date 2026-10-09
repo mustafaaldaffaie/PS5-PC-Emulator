@@ -46,7 +46,8 @@ HleTrapResult HleTrapHandler::HandleInt3(
     hle::GuestMemoryAccess& memory,
     const hle::HleRegistry& registry,
     const HleThunkTable& thunks,
-    hle::GuestThreadAccess* threads) {
+    hle::GuestThreadAccess* threads,
+    hle::GuestFileSystemAccess* files) {
     if (context.rip == 0) {
         return {};
     }
@@ -74,7 +75,8 @@ HleTrapResult HleTrapHandler::HandleInt3(
             memory,
             registry,
             thunks,
-            threads);
+            threads,
+            files);
 
     if (!callResult.handled) {
         return {};
@@ -96,7 +98,8 @@ HleTrapResult HleTrapHandler::HandleInt3(
     memory::GuestMemory& memory,
     const hle::HleRegistry& registry,
     const HleThunkTable& thunks,
-    hle::GuestThreadAccess* threads) {
+    hle::GuestThreadAccess* threads,
+    hle::GuestFileSystemAccess* files) {
     GuestMemoryAccessAdapter memoryAccess(
         memory);
 
@@ -105,7 +108,8 @@ HleTrapResult HleTrapHandler::HandleInt3(
         memoryAccess,
         registry,
         thunks,
-        threads);
+        threads,
+        files);
 }
 
 } // namespace ps5emu::runtime

@@ -43,7 +43,8 @@ public:
         const hle::HleRegistry& registry,
         const HleThunkTable& thunks,
         std::span<const NativeSyscallTrap> syscallTraps = {},
-        NativeGuestThreadRuntimeOptions options = {});
+        NativeGuestThreadRuntimeOptions options = {},
+        hle::GuestFileSystemAccess* files = nullptr);
 
     NativeGuestThreadRuntime(
         const NativeGuestThreadRuntime&) = delete;
@@ -91,6 +92,7 @@ private:
     const HleThunkTable& thunks_;
     std::vector<NativeSyscallTrap> syscallTraps_;
     NativeGuestThreadRuntimeOptions options_;
+    hle::GuestFileSystemAccess* files_ = nullptr;
 
     mutable std::mutex mutex_;
     std::unordered_map<
