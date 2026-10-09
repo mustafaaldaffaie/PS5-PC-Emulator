@@ -2,6 +2,7 @@ add_library(ps5emu_runtime STATIC
     src/ExecutableLinker.cpp
     src/GuestCallDispatcher.cpp
     src/GuestExecutionBuilder.cpp
+    src/GuestModuleCatalog.cpp
     src/GuestMemoryAccessAdapter.cpp
     src/GuestThreadMemory.cpp
     src/HleThunkTable.cpp
@@ -51,6 +52,13 @@ if(PS5EMU_BUILD_TESTS)
     )
     target_link_libraries(ps5emu_import_resolver_tests PRIVATE ps5emu_runtime ps5emu_test_options)
     add_test(NAME import_resolver COMMAND ps5emu_import_resolver_tests)
+
+    add_executable(ps5emu_guest_module_catalog_tests
+        tests/GuestModuleCatalogTests.cpp
+    )
+    target_link_libraries(ps5emu_guest_module_catalog_tests
+        PRIVATE ps5emu_runtime ps5emu_test_options)
+    add_test(NAME guest_module_catalog COMMAND ps5emu_guest_module_catalog_tests)
 
     add_executable(ps5emu_module_export_table_tests
         tests/ModuleExportTableTests.cpp
